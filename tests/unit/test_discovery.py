@@ -1,0 +1,242 @@
+"""Unit tests for vendor-aware discovery."""
+
+from __future__ import annotations
+
+import importlib
+import os
+from datetime import UTC, datetime
+from pathlib import Path
+
+import pytest
+from rawtrace_qc.discovery import (
+    DiscoveryCandidate,
+    DiscoveryOptions,
+    DiscoveryRegistry,
+    DiscoveryResult,
+    DiscoveryScope,
+    FileFormat,
+    TraversalIssue,
+    TraversalTree,
+    Vendor,
+    discover,
+    validate_bruker,
+    validate_thermo,
+)
+from rawtrace_qc.errors import ConfigurationError, DiscoveryError
+
+NOW = datetime(2026, 8, 4, tzinfo=UTC).timestamp()
+
+
+def _write_file(path: Path, size: int, modified_at: float = NOW - 601) -> Path:
+    path.write_bytes(b"x" * size)
+    os.utime(path, (modified_at, modified_at))
+    return path
+
+
+def _write_bruker(path: Path, size: int = 8) -> Path:
+    path.mkdir()
+    _write_file(path / "metadata.TDF", 1)
+    _write_file(path / "binary.TDF_BIN", size)
+    return path
+
+
+def _options(**kwargs: object) -> DiscoveryOptions:
+    values: dict[str, object] = {
+        "scope": DiscoveryScope.RECURSIVE,
+        "min_size_bytes": 1,
+        "min_age_seconds": 600,
+        "clock": lambda: NOW,
+    }
+    values.update(kwargs)
+    return DiscoveryOptions(**values)  # type: ignore[arg-type]
+
+
+def _future_validator(
+    tree: TraversalTree,
+    min_size_bytes: int,
+    min_age_seconds: float,
+    now: float,
+) -> tuple[Path, ...]:
+    del min_size_bytes, min_age_seconds, now
+    return tree.files
+
+
+class TestDiscoveryModels:
+    def test_enums_expose_builtin_vendor_and_format_values(self) -> None:
+        assert Vendor.BRUKER == "bruker"
+        assert Vendor.THERMO == "thermo"
+        assert FileFormat.D == "d"
+        assert FileFormat.RAW == "raw"
+
+    def test_models_store_discovery_data(self, tmp_path: Path) -> None:
+        issue = TraversalIssue(tmp_path, "inaccessible", "permission denied")
+        tree = TraversalTree(files=(tmp_path / "a.raw",), issues=(issue,))
+        candidate = DiscoveryCandidate(tmp_path / "a.raw", Vendor.THERMO, FileFormat.RAW)
+        result = DiscoveryResult((candidate,), (issue,))
+
+        assert tree.files == (tmp_path / "a.raw",)
+        assert result.candidates == (candidate,)
+        assert result.issues == (issue,)
+
+    def test_options_have_expected_defaults(self) -> None:
+        options = DiscoveryOptions()
+
+        assert options.scope is DiscoveryScope.DIRECT
+        assert options.min_size_bytes == 1024 * 1024
+        assert options.min_age_seconds == 600
+
+    @pytest.mark.parametrize("threshold", ["min_size_bytes", "min_age_seconds"])
+    def test_options_reject_negative_thresholds(self, threshold: str) -> None:
+        with pytest.raises(ConfigurationError):
+            if threshold == "min_size_bytes":
+                DiscoveryOptions(min_size_bytes=-1)
+            else:
+                DiscoveryOptions(min_age_seconds=-1)
+
+
+class TestDiscoveryRegistry:
+    def test_register_and_iterate_custom_vendor(self) -> None:
+        registry = DiscoveryRegistry()
+        registration = ("future", "raw", _future_validator)
+
+        registry.register(*registration)
+
+        assert tuple(registry) == (registration,)
+
+    def test_register_rejects_duplicate_vendor_and_format(self) -> None:
+        registry = DiscoveryRegistry()
+        registry.register("future", "raw", _future_validator)
+
+        with pytest.raises(ConfigurationError):
+            registry.register("future", "raw", _future_validator)
+
+
+class TestVendorValidators:
+    def test_validate_thermo_returns_old_enough_files_at_threshold(self, tmp_path: Path) -> None:
+        valid = _write_file(tmp_path / "sample.RAW", 1, NOW - 600)
+        tree = TraversalTree(files=(valid,))
+
+        assert validate_thermo(tree, 1, 600, NOW) == (valid,)
+
+    def test_validate_thermo_omits_small_and_recent_files(self, tmp_path: Path) -> None:
+        small = _write_file(tmp_path / "small.raw", 0)
+        recent = _write_file(tmp_path / "recent.raw", 1, NOW - 599)
+        tree = TraversalTree(files=(small, recent))
+
+        assert validate_thermo(tree, 1, 600, NOW) == ()
+
+    def test_validators_always_omit_empty_files_when_minimum_size_is_zero(self, tmp_path: Path) -> None:
+        thermo = _write_file(tmp_path / "empty.raw", 0)
+        bruker = tmp_path / "empty.d"
+        bruker.mkdir()
+        _write_file(bruker / "metadata.tdf", 1)
+        _write_file(bruker / "binary.tdf_bin", 0)
+
+        assert validate_thermo(TraversalTree(files=(thermo,)), 0, 600, NOW) == ()
+        assert validate_bruker(TraversalTree(directories=(bruker,)), 0, 600, NOW) == ()
+
+    def test_validate_bruker_accepts_arbitrary_case_insensitive_member_names(self, tmp_path: Path) -> None:
+        valid = _write_bruker(tmp_path / "run.D")
+        tree = TraversalTree(directories=(valid,))
+
+        assert validate_bruker(tree, 1, 600, NOW) == (valid,)
+
+    def test_validate_bruker_requires_nonempty_tdf_and_complete_tdf_bin(self, tmp_path: Path) -> None:
+        missing_tdf = tmp_path / "missing_tdf.d"
+        missing_tdf.mkdir()
+        _write_file(missing_tdf / "binary.tdf_bin", 1)
+        empty_tdf = tmp_path / "empty_tdf.d"
+        empty_tdf.mkdir()
+        _write_file(empty_tdf / "metadata.tdf", 0)
+        _write_file(empty_tdf / "binary.tdf_bin", 1)
+        tree = TraversalTree(directories=(missing_tdf, empty_tdf))
+
+        assert validate_bruker(tree, 1, 600, NOW) == ()
+
+
+class TestDiscover:
+    def test_discovers_valid_candidates_in_deterministic_order(self, tmp_path: Path) -> None:
+        _write_file(tmp_path / "z.raw", 1)
+        _write_bruker(tmp_path / "a.d")
+
+        result = discover(tmp_path, _options())
+
+        assert [candidate.path.name for candidate in result.candidates] == [
+            "a.d",
+            "z.raw",
+        ]
+
+    def test_direct_scope_omits_descendants(self, tmp_path: Path) -> None:
+        nested = tmp_path / "nested"
+        nested.mkdir()
+        _write_file(nested / "sample.raw", 1)
+
+        result = discover(tmp_path, _options(scope=DiscoveryScope.DIRECT))
+
+        assert result.candidates == ()
+
+    def test_recursive_scope_prunes_bruker_contents(self, tmp_path: Path) -> None:
+        bruker = _write_bruker(tmp_path / "run.d")
+        _write_file(bruker / "nested.raw", 1)
+
+        result = discover(tmp_path, _options())
+
+        assert [candidate.path for candidate in result.candidates] == [bruker]
+
+    def test_vendor_filter_limits_candidates(self, tmp_path: Path) -> None:
+        bruker = _write_bruker(tmp_path / "run.d")
+        thermo = _write_file(tmp_path / "sample.raw", 1)
+
+        result = discover(tmp_path, _options(vendors=frozenset({Vendor.THERMO})))
+
+        assert [candidate.path for candidate in result.candidates] == [thermo]
+        assert result.candidates[0].vendor is Vendor.THERMO
+        assert bruker not in [candidate.path for candidate in result.candidates]
+
+    def test_custom_registry_validates_the_traversal_tree(self, tmp_path: Path) -> None:
+        sample = _write_file(tmp_path / "sample.future", 1)
+        registry = DiscoveryRegistry()
+        registry.register("future", "future", _future_validator)
+
+        result = discover(tmp_path, _options(), registry)
+
+        assert result.candidates == (DiscoveryCandidate(sample, "future", "future"),)
+
+    def test_inaccessible_descendant_is_returned_as_an_issue(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        accessible = _write_file(tmp_path / "accessible.raw", 1)
+        blocked = tmp_path / "blocked"
+        blocked.mkdir()
+        discover_module = importlib.import_module("rawtrace_qc.discovery.discover")
+        original_scandir = discover_module.os.scandir
+
+        def scandir(path: object) -> object:
+            if Path(path) == blocked:  # type: ignore[arg-type]
+                raise PermissionError("denied")
+            return original_scandir(path)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(discover_module.os, "scandir", scandir)
+
+        result = discover(tmp_path, _options())
+
+        assert result.candidates[0].path == accessible
+        assert result.issues[0].path == blocked
+
+    def test_source_must_be_an_accessible_real_directory(self, tmp_path: Path) -> None:
+        source_file = _write_file(tmp_path / "source.raw", 1)
+
+        with pytest.raises(DiscoveryError):
+            discover(source_file)
+
+    def test_symlinked_entries_are_not_followed(self, tmp_path: Path) -> None:
+        target = tmp_path / "target"
+        target.mkdir()
+        _write_file(target / "sample.raw", 1)
+        link = tmp_path / "link"
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError) as error:
+            pytest.skip(f"symlinks are unavailable: {error}")
+
+        assert discover(tmp_path, _options()).candidates == ()

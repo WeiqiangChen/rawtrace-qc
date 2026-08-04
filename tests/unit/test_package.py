@@ -1,5 +1,7 @@
 """Unit tests for the package foundation."""
 
+from __future__ import annotations
+
 from rawtrace_qc import __version__
 from rawtrace_qc.models import ExtractionResult
 

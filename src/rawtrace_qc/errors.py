@@ -1,5 +1,7 @@
 """Exception types shared by rawtrace-qc public APIs."""
 
+from __future__ import annotations
+
 
 class RawtraceError(Exception):
     """Base class for expected rawtrace-qc errors."""
@@ -7,6 +9,10 @@ class RawtraceError(Exception):
 
 class ConfigurationError(RawtraceError):
     """Raise when a rawtrace-qc option or configuration is invalid."""
+
+
+class DiscoveryError(RawtraceError):
+    """Raise when the discovery source cannot be traversed."""
 
 
 class ArtifactValidationError(RawtraceError):

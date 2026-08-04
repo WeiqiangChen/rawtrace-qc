@@ -1,5 +1,7 @@
 """Public package metadata for rawtrace-qc."""
 
+from __future__ import annotations
+
 from importlib.metadata import PackageNotFoundError, version
 
 try:
