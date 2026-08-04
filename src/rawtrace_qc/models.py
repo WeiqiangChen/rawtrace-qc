@@ -11,8 +11,7 @@ class ExtractionResult:
     """Store the trace artifacts produced by an extraction.
 
     The optional paths are absent when the corresponding MS-level artifact was
-    not requested or is not present in the acquisition. Additional provenance
-    and warning fields can be added as the extractor contract is implemented.
+    not selected or is not present in the acquisition.
     """
 
     ms1_path: Path | None = None

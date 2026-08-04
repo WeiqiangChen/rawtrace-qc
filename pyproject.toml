@@ -7,7 +7,10 @@ authors = [
     { name = "David M. Hollenstein", email = "hollenstein.david@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=1.26",
+    "pyarrow>=14.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.21,<0.12.0"]

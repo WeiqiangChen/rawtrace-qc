@@ -4,16 +4,16 @@
 
 `rawtrace-qc` is a vendor-neutral Python library for discovering mass-spectrometry raw acquisitions, extracting scan-level traces, validating trace artifacts, and preparing interactive QC reports.
 
-The current discovery implementation supports Bruker timsTOF `.d` directories and Thermo `.raw` files. Thermo extraction is not currently included; discovery only identifies complete Thermo files for later processing.
+The current implementation supports Bruker timsTOF `.d` discovery and scan-trace extraction, plus Thermo `.raw` discovery. Thermo extraction is deferred because it depends on an external C# helper.
 
 The package is library-first. Applications such as a command-line tool or GUI should call the public library services rather than implement vendor-specific filesystem or processing logic themselves.
 
 ## Features
 
 - [x] Vendor-aware raw-file discovery for Bruker timsTOF `.d` directories and Thermo `.raw` files
-- [ ] Bruker scan-trace extraction
+- [x] Bruker scan-trace extraction
 - [ ] Thermo scan-trace extraction
-- [ ] Scan-trace validation
+- [x] Scan-trace validation
 - [ ] Scan-trace processing
 - [ ] HTML report generation
 - [ ] Command-line interface
@@ -23,7 +23,7 @@ The package is library-first. Applications such as a command-line tool or GUI sh
 
 The public library is organized around services that can be used by any application. Applications should provide input directories and options, call the relevant service, and present the returned models to users. Filesystem traversal, vendor recognition, validation, and error handling belong in the library.
 
-The current public service is `rawtrace_qc.discovery.discover`. Later extraction, processing, and reporting services will follow the same pattern and remain independent of any particular application interface.
+The public services currently include `rawtrace_qc.discovery.discover`, `rawtrace_qc.extractors.BrukerExtractor`, and the trace artifact functions in `rawtrace_qc.traces`. Later processing and reporting services will follow the same pattern and remain independent of any particular application interface.
 
 ## File Discovery
 
@@ -71,6 +71,47 @@ An application should treat discovery as an input-review step before extraction 
 5. Handle `DiscoveryError` as an input-level failure that requires user action.
 
 The application should not walk raw-file directories itself, inspect vendor-specific member files, or infer validity from filename suffixes. Those rules belong to the discovery service so that the command-line interface, GUI, and other library consumers behave consistently.
+
+## Scan-Trace Extraction
+
+`BrukerExtractor.extract()` reads frame metadata from `analysis.tdf` and the optional precomputed BPC trace from `chromatography-data.sqlite`. It writes schema-v1 Snappy Parquet artifacts using the naming convention `<run-name>.ms1-trace.parquet` and `<run-name>.msn-trace.parquet`.
+
+Both `select_ms1` and `select_msn` default to `True`. This writes every available level: an MS1 artifact is written when MS1 rows exist, and an MSn artifact is written only when MSn rows exist. Selecting only one level writes only that level. Selecting a level that does not exist raises an error, except that an all-level request omits unavailable levels. When both flags are `False`, the input is structurally checked and no output is created.
+
+Bruker MSn rows have `row_granularity` set to `frame-aggregate`. A frame can contain multiple precursor isolation events, so these rows must not be interpreted as individual precursor spectra.
+
+### Basic Extraction Example
+
+```python
+from pathlib import Path
+
+from rawtrace_qc.extractors import BrukerExtractor
+from rawtrace_qc.traces import load_trace
+
+result = BrukerExtractor().extract(
+	Path("/data/raw/sample.d"),
+	output_directory=Path("/data/traces"),
+	precision_mode="high",
+)
+
+if result.ms1_path is not None:
+	ms1 = load_trace(result.ms1_path)
+	print(ms1.table.num_rows, ms1.metadata["vendor"])
+
+if result.msn_path is not None:
+	msn = load_trace(result.msn_path)
+	print(msn.metadata["row_granularity"])
+```
+
+The extractor overwrites existing artifacts with the same destination path. It currently emits `scan_id`, `retention_time_sec`, `ms_level`, and the available `total_ion_current` and `base_peak_intensity` columns. The test SQLite fixture retains additional frame fields such as `AccumulationTime` for future extraction work, but `injection_time_ms` is not emitted yet.
+
+## Scan-Trace Import and Validation
+
+`load_trace(path)` reads a Parquet artifact into an Arrow table and validates its required columns, metadata, MS-level contents, and Snappy compression before returning a `TraceArtifact`. Arrow tables are immutable, so transformations such as filtering, casting, adding columns, and dropping columns return new tables. Later processing code can keep using Arrow or convert to pandas only when a pandas-specific operation or report library requires it.
+
+Validation is strict by default and rejects columns that are not implemented by this package. Use `load_trace(path, strict=False)` when consuming artifacts that contain contract-defined future columns or additional producer columns. Known future columns are still type-checked in non-strict mode; unknown columns are ignored.
+
+The artifact contract requires `scan_id`, `retention_time_sec`, and `ms_level`. Optional columns may be omitted when unavailable, while null values in present optional columns represent row-level extraction failure. Required columns cannot contain null values.
 
 ## Developer Guide
 

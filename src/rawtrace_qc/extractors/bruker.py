@@ -1,0 +1,385 @@
+"""Extract schema-v1 scan traces from Bruker timsTOF acquisitions."""
+
+from __future__ import annotations
+
+import importlib.metadata
+import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Literal
+
+import numpy as np
+import pyarrow as pa
+
+from rawtrace_qc.models import ExtractionResult
+from rawtrace_qc.traces import write_trace
+
+BPC_TRACE_DESCRIPTION = "BPC,±MS"
+PrecisionMode = Literal["low", "high"]
+
+
+@dataclass(frozen=True, slots=True)
+class _Frames:
+    """Store the frame fields needed by the initial extractor."""
+
+    scan_id: np.ndarray
+    retention_time_sec: np.ndarray
+    msms_type: np.ndarray
+    total_ion_current: np.ndarray | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Summary:
+    """Store normalized frame values before level-specific writing."""
+
+    scan_id: np.ndarray
+    retention_time_sec: np.ndarray
+    ms_level: np.ndarray
+    total_ion_current: np.ndarray | None
+    base_peak_intensity: np.ndarray | None
+
+
+class BrukerExtractor:
+    """Create scan-table Parquet files from a Bruker timsTOF `.d` folder.
+
+    The initial extractor reads frame metadata from `analysis.tdf` and the
+    precomputed BPC trace from `chromatography-data.sqlite`. Bruker MSn rows
+    remain frame aggregates because per-isolation-event data requires decoding
+    `analysis.tdf_bin`.
+    """
+
+    def extract(
+        self,
+        input_path: Path,
+        output_directory: Path | None = None,
+        output_name: str | None = None,
+        precision_mode: PrecisionMode = "low",
+        *,
+        select_ms1: bool = True,
+        select_msn: bool = True,
+    ) -> ExtractionResult:
+        """Extract the selected Bruker scan levels.
+
+        Args:
+            input_path: Bruker `.d` acquisition folder.
+            output_directory: Directory for output files. Defaults to the
+                input folder's parent directory.
+            output_name: Optional literal filename stem. Defaults to the input
+                folder name, including `.d`.
+            precision_mode: `low` for float32 trace fields, or `high` for
+                float64 trace fields. Defaults to `low`.
+            select_ms1: If True (default), write the MS1 artifact.
+            select_msn: If True (default), write the MSn artifact when MSn rows
+                are present.
+
+        Returns:
+            The paths created for the selected, available MS levels. When both
+            selection flags are false, no output is created and both paths are
+            None after basic input validation.
+
+        Raises:
+            FileNotFoundError: If `analysis.tdf` is missing.
+            ValueError: If an argument or input path is invalid.
+            RuntimeError: If a selected level is absent or required frame data
+                cannot form a valid table.
+        """
+        _validate_options(input_path, output_name, precision_mode)
+        resolved_input = input_path.expanduser().resolve()
+        tdf_path = resolved_input / "analysis.tdf"
+        if not tdf_path.is_file():
+            raise FileNotFoundError(f"analysis.tdf not found in {resolved_input}")
+
+        frames = self._read_frames(tdf_path)
+        summary = self._build_summary(
+            frames,
+            self._read_bpc(resolved_input / "chromatography-data.sqlite"),
+            self._read_dia_ms2_ids(tdf_path),
+        )
+        if not select_ms1 and not select_msn:
+            return ExtractionResult()
+
+        select_all_levels = select_ms1 and select_msn
+        ms1_indices = np.flatnonzero(summary.ms_level == 1)
+        msn_indices = np.flatnonzero(summary.ms_level > 1)
+        if select_ms1 and not len(ms1_indices):
+            raise RuntimeError("The input folder contains no MS1 frames.")
+        if select_msn and not select_all_levels and not len(msn_indices):
+            raise RuntimeError("The input folder contains no MSn frames.")
+
+        destination_directory = (
+            resolved_input.parent
+            if output_directory is None
+            else output_directory.expanduser().resolve()
+        )
+        destination_directory.mkdir(parents=True, exist_ok=True)
+        file_stem = output_name or resolved_input.name
+        extracted_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        source_path = str(resolved_input)
+        ms1_path = None
+        msn_path = None
+
+        if select_ms1:
+            ms1_path = self._write_level(
+                summary,
+                ms1_indices,
+                destination_directory / f"{file_stem}.ms1-trace.parquet",
+                "ms1",
+                precision_mode,
+                "spectrum",
+                source_path,
+                extracted_at,
+            )
+        if select_msn and len(msn_indices):
+            msn_path = self._write_level(
+                summary,
+                msn_indices,
+                destination_directory / f"{file_stem}.msn-trace.parquet",
+                "msn",
+                precision_mode,
+                "frame-aggregate",
+                source_path,
+                extracted_at,
+            )
+
+        return ExtractionResult(ms1_path=ms1_path, msn_path=msn_path)
+
+    @staticmethod
+    def _read_frames(tdf_path: Path) -> _Frames:
+        with sqlite3.connect(tdf_path) as connection:
+            available_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(Frames)")
+            }
+            required_columns = {"Id", "Time", "MsMsType"}
+            missing_columns = required_columns - available_columns
+            if missing_columns:
+                missing = ", ".join(sorted(missing_columns))
+                raise RuntimeError(f"Frames is missing required columns: {missing}")
+            tic_select = (
+                ", SummedIntensities"
+                if "SummedIntensities" in available_columns
+                else ""
+            )
+            rows = connection.execute(
+                f"SELECT Id, Time, MsMsType{tic_select} FROM Frames ORDER BY Id"
+            ).fetchall()
+
+        try:
+            scan_ids = np.asarray(
+                [_integer_value(row[0]) for row in rows], dtype=np.int32
+            )
+            retention_times = np.asarray(
+                [_finite_float(row[1]) for row in rows], dtype=np.float64
+            )
+            msms_types = np.asarray(
+                [_integer_value(row[2]) for row in rows], dtype=np.int64
+            )
+        except (TypeError, ValueError, OverflowError) as error:
+            raise RuntimeError(
+                "Frames contains invalid required scan-table values."
+            ) from error
+        total_ion_current = None
+        if tic_select:
+            total_ion_current = np.asarray(
+                [_nullable_float(row[3]) for row in rows], dtype=np.float64
+            )
+        return _Frames(scan_ids, retention_times, msms_types, total_ion_current)
+
+    @staticmethod
+    def _read_dia_ms2_ids(tdf_path: Path) -> set[int]:
+        with sqlite3.connect(tdf_path) as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            if "DiaFrameMsMsInfo" not in tables:
+                return set()
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(DiaFrameMsMsInfo)")
+            }
+            if "Frame" not in columns:
+                raise RuntimeError("DiaFrameMsMsInfo is missing required column: Frame")
+            return {
+                _integer_value(row[0])
+                for row in connection.execute(
+                    "SELECT DISTINCT Frame FROM DiaFrameMsMsInfo"
+                )
+            }
+
+    @staticmethod
+    def _read_bpc(chromatography_path: Path) -> tuple[np.ndarray, np.ndarray] | None:
+        if not chromatography_path.is_file():
+            return None
+        try:
+            with sqlite3.connect(chromatography_path) as connection:
+                source_row = connection.execute(
+                    "SELECT Id FROM TraceSources WHERE Description = ?",
+                    (BPC_TRACE_DESCRIPTION,),
+                ).fetchone()
+                if source_row is None:
+                    return None
+                chunks = connection.execute(
+                    "SELECT Times, Intensities FROM TraceChunks "
+                    "WHERE Trace = ? ORDER BY rowid",
+                    (source_row[0],),
+                ).fetchall()
+        except sqlite3.Error:
+            return None
+
+        times: list[np.ndarray] = []
+        intensities: list[np.ndarray] = []
+        for chunk_times, chunk_intensities in chunks:
+            time_values = np.frombuffer(chunk_times, dtype=np.float64)
+            intensity_values = np.frombuffer(chunk_intensities, dtype=np.float32)
+            size = min(len(time_values), len(intensity_values))
+            if size:
+                times.append(time_values[:size])
+                intensities.append(intensity_values[:size])
+        if not times:
+            return None
+        bpc_times = np.concatenate(times)
+        bpc_intensities = np.concatenate(intensities)
+        valid = np.isfinite(bpc_times) & np.isfinite(bpc_intensities)
+        if not np.any(valid):
+            return None
+        order = np.argsort(bpc_times[valid], kind="stable")
+        sorted_times = bpc_times[valid][order]
+        sorted_intensities = bpc_intensities[valid][order]
+        unique_times, unique_indices = np.unique(sorted_times, return_index=True)
+        return unique_times, sorted_intensities[unique_indices]
+
+    @staticmethod
+    def _build_summary(
+        frames: _Frames,
+        bpc: tuple[np.ndarray, np.ndarray] | None,
+        dia_ms2_ids: set[int],
+    ) -> _Summary:
+        ms_level = np.where(frames.msms_type == 0, 1, 2).astype(np.int8)
+        if dia_ms2_ids:
+            ms_level[np.isin(frames.scan_id, list(dia_ms2_ids))] = 2
+        base_peak_intensity = None
+        if bpc is not None:
+            base_peak_intensity = np.asarray(
+                np.interp(
+                    frames.retention_time_sec,
+                    bpc[0],
+                    bpc[1],
+                    left=np.nan,
+                    right=np.nan,
+                ),
+                dtype=np.float64,
+            )
+        return _Summary(
+            frames.scan_id,
+            frames.retention_time_sec,
+            ms_level,
+            frames.total_ion_current,
+            base_peak_intensity,
+        )
+
+    @staticmethod
+    def _write_level(
+        summary: _Summary,
+        indices: np.ndarray,
+        output_path: Path,
+        ms_level_file: Literal["ms1", "msn"],
+        precision_mode: PrecisionMode,
+        row_granularity: Literal["spectrum", "frame-aggregate"],
+        source_path: str,
+        extracted_at: str,
+    ) -> Path:
+        trace_type = pa.float32() if precision_mode == "low" else pa.float64()
+        values: dict[str, pa.Array] = {
+            "scan_id": pa.array(summary.scan_id[indices], type=pa.int32()),
+            "retention_time_sec": pa.array(
+                summary.retention_time_sec[indices], type=trace_type
+            ),
+            "ms_level": pa.array(summary.ms_level[indices], type=pa.int8()),
+        }
+        if summary.total_ion_current is not None:
+            values["total_ion_current"] = _nullable_array(
+                summary.total_ion_current[indices], trace_type
+            )
+        if summary.base_peak_intensity is not None:
+            values["base_peak_intensity"] = _nullable_array(
+                summary.base_peak_intensity[indices], trace_type
+            )
+        ordered_names = ["scan_id", "retention_time_sec", "ms_level"]
+        ordered_names[1:1] = [
+            name
+            for name in ("total_ion_current", "base_peak_intensity")
+            if name in values
+        ]
+        table = pa.Table.from_arrays(
+            [values[name] for name in ordered_names], names=ordered_names
+        )
+        return write_trace(
+            table,
+            output_path,
+            vendor="bruker",
+            ms_level_file=ms_level_file,
+            precision_mode=precision_mode,
+            row_granularity=row_granularity,
+            source_path=Path(source_path),
+            extracted_at=extracted_at,
+            generator=f"rawtrace-qc-bruker/{_package_version()}",
+        )
+
+
+def _validate_options(
+    input_path: Path, output_name: str | None, precision_mode: str
+) -> None:
+    if precision_mode not in {"low", "high"}:
+        raise ValueError("precision_mode must be 'low' or 'high'.")
+    resolved_input = input_path.expanduser().resolve()
+    if resolved_input.suffix.casefold() != ".d" or not resolved_input.is_dir():
+        raise ValueError(f"Expected a Bruker .d directory, got: {resolved_input}")
+    if output_name is not None and not _is_output_name(output_name):
+        raise ValueError(
+            "output_name must be a non-empty valid file name without path separators."
+        )
+
+
+def _integer_value(value: int | float | str) -> int:
+    number = float(value)
+    if not np.isfinite(number) or not number.is_integer():
+        raise ValueError(value)
+    return int(number)
+
+
+def _finite_float(value: int | float | str) -> float:
+    number = float(value)
+    if not np.isfinite(number):
+        raise ValueError(value)
+    return number
+
+
+def _nullable_float(value: object) -> float:
+    if value is None:
+        return np.nan
+    if not isinstance(value, (int, float, str)):
+        raise ValueError(value)
+    return _finite_float(value)
+
+
+def _nullable_array(values: np.ndarray, data_type: pa.DataType) -> pa.Array:
+    return pa.array(
+        [None if not np.isfinite(value) else float(value) for value in values],
+        type=data_type,
+    )
+
+
+def _package_version() -> str:
+    try:
+        return importlib.metadata.version("rawtrace-qc")
+    except importlib.metadata.PackageNotFoundError:
+        return "unknown"
+
+
+def _is_output_name(output_name: str) -> bool:
+    return bool(output_name.strip()) and not any(
+        character in output_name for character in '\\/:*?"<>|'
+    )
