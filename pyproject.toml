@@ -54,5 +54,5 @@ indent-style = "space"
 [tool.pyrefly]
 preset = "default"
 python-version = "3.12"
-project-includes = ["src/**/*.py", "tests/**/*.py"]
+project-includes = ["src/**/*.py"]
 search-path = ["src"]

@@ -5,8 +5,8 @@
         "tests"
     ],
     "python.testing.unittestEnabled": false,
-    "ruff.configuration": "${workspaceFolder}/pyproject.toml",
-    "ruff.importStrategy": "fromEnvironment",
+    // "ruff.configuration": "${workspaceFolder}/pyproject.toml",
+    // "ruff.importStrategy": "fromEnvironment",
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.formatOnSave": true,

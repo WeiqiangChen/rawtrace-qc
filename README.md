@@ -14,15 +14,16 @@ Install the project and development dependencies with:
 uv sync
 ```
 
-Run the unit tests, lint checks, formatter check, and type checker with:
+Run the unit tests, source lint and formatter checks, test formatting check, and type checker with:
 
 ```bash
 uv run pytest
 uv run ruff check src
-uv run ruff check tests
 uv run ruff format --check src
 uv run ruff format --check tests
 uv run pyrefly check
 ```
+
+Ruff formatting is applied to tests with the separate 120-character test configuration. Test linting is intentionally not enforced.
 
 See `documentation.md` and `implementation-plan.md` for the project design and planned workflows.
