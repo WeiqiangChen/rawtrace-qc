@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -60,7 +61,7 @@ def load_trace(path: Path, *, strict: bool = True) -> TraceArtifact:
         ) from error
 
     metadata = _decode_metadata(table.schema.metadata)
-    _validate_table(table, metadata, strict=strict)
+    validate_trace(table, metadata, strict=strict)
     _validate_compression(parquet_file)
     return TraceArtifact(resolved_path, table, metadata)
 
@@ -107,7 +108,7 @@ def write_trace(
         "source_path": str(source_path),
         "extracted_at": extracted_at,
     }
-    _validate_table(table, metadata, strict=True)
+    validate_trace(table, metadata, strict=True)
 
     resolved_path = output_path.expanduser().resolve()
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
@@ -134,12 +135,25 @@ def _decode_metadata(raw_metadata: Mapping[bytes, bytes] | None) -> dict[str, st
         ) from error
 
 
-def _validate_table(
+def validate_trace(
     table: pa.Table,
     metadata: Mapping[str, str],
     *,
-    strict: bool,
+    strict: bool = True,
 ) -> None:
+    """Validate a trace table and its schema metadata.
+
+    Args:
+        table: Arrow table containing scan-trace rows.
+        metadata: Decoded Parquet metadata associated with the table.
+        strict: If True, reject unknown and reserved columns. If False, allow
+            columns that are not implemented by this package while still
+            validating known column types.
+
+    Raises:
+        ArtifactValidationError: If the table or metadata violates the
+            schema-v1 trace contract.
+    """
     missing_columns = REQUIRED_COLUMNS - set(table.column_names)
     if missing_columns:
         raise ArtifactValidationError(
@@ -174,6 +188,7 @@ def _validate_table(
 
     _validate_metadata(metadata)
     _validate_levels(table, metadata)
+    _validate_faims(table)
 
 
 def _validate_column_type(table: pa.Table, definition: ColumnDefinition) -> None:
@@ -201,6 +216,22 @@ def _validate_levels(table: pa.Table, metadata: Mapping[str, str]) -> None:
     if ms_level_file == "msn" and any(level is None or level < 2 for level in levels):
         raise ArtifactValidationError(
             "An MSn trace must contain only ms_level values >= 2."
+        )
+
+
+def _validate_faims(table: pa.Table) -> None:
+    if "faims_cv" not in table.column_names:
+        return
+
+    values = table["faims_cv"].combine_chunks().to_pylist()
+    non_null_values = [value for value in values if value is not None]
+    if non_null_values and len(non_null_values) != len(values):
+        raise ArtifactValidationError(
+            "A trace faims_cv column must be entirely null or contain no null values."
+        )
+    if any(not math.isfinite(float(value)) for value in non_null_values):
+        raise ArtifactValidationError(
+            "A trace faims_cv column must contain finite values."
         )
 
 

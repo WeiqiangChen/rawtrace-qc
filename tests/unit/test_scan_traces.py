@@ -7,7 +7,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 from rawtrace_qc.errors import ArtifactValidationError
-from rawtrace_qc.traces import load_trace, write_trace
+from rawtrace_qc.traces import load_trace, validate_trace, write_trace
 
 
 def _table() -> pa.Table:
@@ -59,6 +59,28 @@ class TestScanTraceWriting:
 
 
 class TestScanTraceValidation:
+    def test_public_validator_accepts_valid_trace(self) -> None:
+        metadata = {key.decode(): value.decode() for key, value in _metadata().items()}
+
+        validate_trace(_table(), metadata)
+
+    def test_load_accepts_numeric_faims_column(self, tmp_path: Path) -> None:
+        table = _table().append_column("faims_cv", pa.array([-50.0, -60.0], type=pa.float32()))
+        path = tmp_path / "faims.parquet"
+        pq.write_table(table.replace_schema_metadata(_metadata()), path, compression="snappy")
+
+        artifact = load_trace(path)
+
+        assert artifact.table["faims_cv"].to_pylist() == [-50.0, -60.0]
+
+    def test_load_rejects_non_numeric_faims_column(self, tmp_path: Path) -> None:
+        table = _table().append_column("faims_cv", pa.array(["A", "B"]))
+        path = tmp_path / "invalid-faims.parquet"
+        pq.write_table(table.replace_schema_metadata(_metadata()), path, compression="snappy")
+
+        with pytest.raises(ArtifactValidationError, match="faims_cv.*invalid Arrow type"):
+            load_trace(path)
+
     def test_load_rejects_missing_required_column(self, tmp_path: Path) -> None:
         table = _table().drop(["scan_id"])
         path = tmp_path / "invalid.parquet"

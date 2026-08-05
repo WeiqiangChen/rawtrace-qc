@@ -17,3 +17,7 @@ class DiscoveryError(RawtraceError):
 
 class ArtifactValidationError(RawtraceError):
     """Raise when a generated or loaded trace artifact violates its contract."""
+
+
+class ProcessingError(RawtraceError):
+    """Raise when trace artifacts cannot be prepared for reporting."""

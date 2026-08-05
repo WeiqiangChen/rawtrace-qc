@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from rawtrace_qc.traces.artifact import TraceArtifact, load_trace, write_trace
+from rawtrace_qc.traces.artifact import (
+    TraceArtifact,
+    load_trace,
+    validate_trace,
+    write_trace,
+)
 from rawtrace_qc.traces.schema import (
     IMPLEMENTED_COLUMNS,
     IMPLEMENTED_OPTIONAL_COLUMNS,
@@ -31,5 +36,6 @@ __all__ = [
     "MetadataField",
     "TraceArtifact",
     "load_trace",
+    "validate_trace",
     "write_trace",
 ]

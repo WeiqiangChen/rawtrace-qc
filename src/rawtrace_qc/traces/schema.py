@@ -39,12 +39,7 @@ TRACE_COLUMNS = (
     ColumnDefinition("ms_level", ColumnLogicalType.INTEGER, required=True),
     ColumnDefinition("total_ion_current", ColumnLogicalType.FLOAT, required=False),
     ColumnDefinition("base_peak_intensity", ColumnLogicalType.FLOAT, required=False),
-    ColumnDefinition(
-        "faims_cv",
-        ColumnLogicalType.FLOAT,
-        required=False,
-        support=ColumnSupport.RESERVED,
-    ),
+    ColumnDefinition("faims_cv", ColumnLogicalType.FLOAT, required=False),
     ColumnDefinition(
         "injection_time_ms",
         ColumnLogicalType.FLOAT,

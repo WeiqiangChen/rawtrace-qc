@@ -14,10 +14,13 @@ The package is library-first. Applications such as a command-line tool or GUI sh
 - [x] Bruker scan-trace extraction
 - [ ] Thermo scan-trace extraction
 - [x] Scan-trace validation
-- [ ] Scan-trace processing
+- [x] Scan-trace processing
+    - [ ] FAIMS "combined" mode
+    - [ ] Optimize dtype and precision for compact HTML serialization
+    - [ ] Process filters requested channels by using `ProcessingOptions`
 - [ ] HTML report generation
-- [ ] Command-line interface
-- [ ] Graphical user interface
+- [ ] Command-line interface (typer or **cyclopts**)
+- [ ] Graphical user interface (pyside6)
 
 ## Library API
 
@@ -107,11 +110,43 @@ The extractor overwrites existing artifacts with the same destination path. It c
 
 ## Scan-Trace Import and Validation
 
-`load_trace(path)` reads a Parquet artifact into an Arrow table and validates its required columns, metadata, MS-level contents, and Snappy compression before returning a `TraceArtifact`. Arrow tables are immutable, so transformations such as filtering, casting, adding columns, and dropping columns return new tables. Later processing code can keep using Arrow or convert to pandas only when a pandas-specific operation or report library requires it.
+`load_trace(path)` reads a Parquet artifact into an Arrow table and validates its required columns, metadata, MS-level contents, and Snappy compression before returning a `TraceArtifact`. The same table and metadata contract is available through `validate_trace(table, metadata)` for callers that construct artifacts in memory. Arrow tables are immutable, so transformations such as filtering, casting, adding columns, and dropping columns return new tables. Later processing code can keep using Arrow or convert to pandas only when a pandas-specific operation or report library requires it.
 
 Validation is strict by default and rejects columns that are not implemented by this package. Use `load_trace(path, strict=False)` when consuming artifacts that contain contract-defined future columns or additional producer columns. Known future columns are still type-checked in non-strict mode; unknown columns are ignored.
 
-The artifact contract requires `scan_id`, `retention_time_sec`, and `ms_level`. Optional columns may be omitted when unavailable, while null values in present optional columns represent row-level extraction failure. Required columns cannot contain null values.
+The artifact contract requires `scan_id`, `retention_time_sec`, and `ms_level`. Optional columns may be omitted when unavailable, while null values in present optional columns represent row-level extraction failure. Required columns cannot contain null values. A `faims_cv` column must contain either only null values or a finite numeric value for every row.
+
+## Scan-Trace Processing
+
+`process_traces()` prepares one or more loaded `TraceArtifact` instances for report generation without depending on Plotly, pandas, or another report library. It returns a tuple of immutable `ProcessedTable` objects. Each object contains a report-ready Arrow table and a `ProcessedTableMetadata` dataclass.
+
+The default processing options select MS1 and MS2, split tables by FAIMS compensation voltage when `faims_cv` contains values, and convert retention time from seconds to minutes. An MSn artifact containing several levels is therefore split into one processed table per selected MS level and FAIMS partition. Global FAIMS mode is ignored for tables without FAIMS values. `FaimsProcessingMode.COMBINED` is reserved for a future implementation and raises `NotImplementedError` for FAIMS-bearing tables. Set `minimum_faims_percentage` to a value from 0 to 100 to omit FAIMS partitions containing fewer than that percentage of rows in their selected MS-level table.
+
+Processed tables contain `retention_time_min` and the available `total_ion_current` and `base_peak_intensity` columns. The retention-time unit is recorded as `time_unit="min"`. `scan_id`, `ms_level`, and `faims_cv` are removed from the processed table because they are represented in the table metadata. Source fields such as vendor, source path, generator, extraction time, precision, and row granularity are copied into `ProcessedTableMetadata`.
+
+Labels initially equal the raw-file name. Use `relabel_tables()` to create new processed-table instances with shortened or otherwise customized display labels without mutating the original results. Plotly figures, colors, line styles, channel controls, and HTML serialization belong to the later report layer.
+
+### Processing Example
+
+```python
+from pathlib import Path
+
+from rawtrace_qc.processing import process_traces, relabel_tables
+from rawtrace_qc.traces import load_trace
+
+artifacts = [
+	load_trace(Path("/data/traces/sample.ms1-trace.parquet")),
+	load_trace(Path("/data/traces/sample.msn-trace.parquet")),
+]
+processed = process_traces(artifacts)
+processed = relabel_tables(processed, [table.metadata.rawfile_name for table in processed])
+
+for item in processed:
+	print(item.metadata.label, item.metadata.ms_level)
+	print(item.table.column_names)
+```
+
+The current processor expects valid schema-v1 artifacts; `validate_trace()` owns source-contract checks before partitioning begins. Precision reduction for compact HTML serialization is reserved for a later implementation because its exact representation depends on the report serializer.
 
 ## Developer Guide
 
