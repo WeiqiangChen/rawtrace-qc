@@ -33,6 +33,7 @@ def _metadata(ms_level_file: str = "ms1") -> dict[bytes, bytes]:
             "row_granularity": "spectrum",
             "source_path": "C:/sample.d",
             "extracted_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "acquisition_start_time": "2026-08-04T10:00:00Z",
         }.items()
     }
 
@@ -48,6 +49,7 @@ class TestScanTraceWriting:
             row_granularity="spectrum",
             source_path=tmp_path / "sample.d",
             extracted_at="2026-08-04T12:00:00Z",
+            acquisition_start_time="2026-08-04T10:00:00Z",
             generator="test/1.0",
         )
 

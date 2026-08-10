@@ -25,6 +25,8 @@ class TestBrukerExtractor:
             "ms_level",
         ]
         assert msn.metadata["row_granularity"] == "frame-aggregate"
+        assert ms1.metadata["acquisition_start_time"] == "2026-08-01T12:30:15Z"
+        assert msn.metadata["acquisition_start_time"] == "2026-08-01T12:30:15Z"
         assert msn.table["scan_id"].to_pylist() == [2, 3]
         assert msn.table["base_peak_intensity"].to_pylist() == [20.0, 30.0]
 

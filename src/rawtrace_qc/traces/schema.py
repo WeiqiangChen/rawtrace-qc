@@ -118,6 +118,7 @@ class MetadataField(StrEnum):
     ROW_GRANULARITY = "row_granularity"
     SOURCE_PATH = "source_path"
     EXTRACTED_AT = "extracted_at"
+    ACQUISITION_START_TIME = "acquisition_start_time"
 
 
 REQUIRED_METADATA = frozenset(field.value for field in MetadataField)

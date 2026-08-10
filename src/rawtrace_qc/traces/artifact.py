@@ -76,6 +76,7 @@ def write_trace(
     row_granularity: str,
     source_path: Path,
     extracted_at: str,
+    acquisition_start_time: str,
     generator: str,
 ) -> Path:
     """Write a validated table as a schema-v1 Snappy Parquet artifact.
@@ -89,6 +90,7 @@ def write_trace(
         row_granularity: Row meaning, either `spectrum` or `frame-aggregate`.
         source_path: Resolved path to the original acquisition.
         extracted_at: ISO-8601 UTC extraction timestamp.
+        acquisition_start_time: ISO-8601 UTC source acquisition start timestamp.
         generator: Name and version of the producing extractor.
 
     Returns:
@@ -107,6 +109,7 @@ def write_trace(
         "row_granularity": row_granularity,
         "source_path": str(source_path),
         "extracted_at": extracted_at,
+        "acquisition_start_time": acquisition_start_time,
     }
     validate_trace(table, metadata, strict=True)
 
@@ -263,12 +266,13 @@ def _validate_metadata(metadata: Mapping[str, str]) -> None:
         )
     if not metadata["source_path"].strip():
         raise ArtifactValidationError("Metadata source_path must not be empty.")
-    try:
-        datetime.fromisoformat(metadata["extracted_at"].replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ArtifactValidationError(
-            "Metadata extracted_at must be an ISO-8601 timestamp."
-        ) from error
+    for field_name in ("extracted_at", "acquisition_start_time"):
+        try:
+            datetime.fromisoformat(metadata[field_name].replace("Z", "+00:00"))
+        except ValueError as error:
+            raise ArtifactValidationError(
+                f"Metadata {field_name} must be an ISO-8601 timestamp."
+            ) from error
 
 
 def _validate_compression(parquet_file: pq.ParquetFile) -> None:

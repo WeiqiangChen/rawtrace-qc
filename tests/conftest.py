@@ -34,6 +34,11 @@ def _create_tdf(path: Path) -> None:
                 (3, 3.0, "+", 0, 0, 3, 300, 3000, 30, 300, 7.0, 1.0),
             ],
         )
+        connection.execute("CREATE TABLE GlobalMetadata (Key TEXT PRIMARY KEY, Value TEXT NOT NULL)")
+        connection.execute(
+            "INSERT INTO GlobalMetadata VALUES (?, ?)",
+            ("AcquisitionDateTime", "2026-08-01T14:30:15.123+02:00"),
+        )
         connection.execute("CREATE TABLE DiaFrameMsMsInfo (Frame INTEGER PRIMARY KEY, WindowGroup INTEGER NOT NULL)")
         connection.execute("INSERT INTO DiaFrameMsMsInfo VALUES (3, 1)")
         connection.commit()

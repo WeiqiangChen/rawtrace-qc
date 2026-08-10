@@ -31,6 +31,7 @@ _SOURCE_METADATA_FIELDS = (
     "row_granularity",
     "source_path",
     "extracted_at",
+    "acquisition_start_time",
 )
 
 
@@ -220,6 +221,7 @@ def _create_processed_table(
         vendor=source_metadata["vendor"],
         ms_level_file=source_metadata["ms_level_file"],
         extracted_at=source_metadata["extracted_at"],
+        acquisition_start_time=source_metadata["acquisition_start_time"],
         ms_level=ms_level,
         faims_cv=faims_cv,
         row_granularity=source_metadata["row_granularity"],

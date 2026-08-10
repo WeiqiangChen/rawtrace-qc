@@ -108,6 +108,8 @@ if result.msn_path is not None:
 
 The extractor overwrites existing artifacts with the same destination path. It currently emits `scan_id`, `retention_time_sec`, `ms_level`, and the available `total_ion_current` and `base_peak_intensity` columns. The test SQLite fixture retains additional frame fields such as `AccumulationTime` for future extraction work, but `injection_time_ms` is not emitted yet.
 
+Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the required `acquisition_start_time` metadata field, normalized to an ISO-8601 UTC timestamp and shared by the MS1 and MSn artifacts.
+
 ## Scan-Trace Import and Validation
 
 `load_trace(path)` reads a Parquet artifact into an Arrow table and validates its required columns, metadata, MS-level contents, and Snappy compression before returning a `TraceArtifact`. The same table and metadata contract is available through `validate_trace(table, metadata)` for callers that construct artifacts in memory. Arrow tables are immutable, so transformations such as filtering, casting, adding columns, and dropping columns return new tables. Later processing code can keep using Arrow or convert to pandas only when a pandas-specific operation or report library requires it.
@@ -122,7 +124,7 @@ The artifact contract requires `scan_id`, `retention_time_sec`, and `ms_level`. 
 
 The default processing options select MS1 and MS2, split tables by FAIMS compensation voltage when `faims_cv` contains values, and convert retention time from seconds to minutes. An MSn artifact containing several levels is therefore split into one processed table per selected MS level and FAIMS partition. Global FAIMS mode is ignored for tables without FAIMS values. `FaimsProcessingMode.COMBINED` is reserved for a future implementation and raises `NotImplementedError` for FAIMS-bearing tables. Set `minimum_faims_percentage` to a value from 0 to 100 to omit FAIMS partitions containing fewer than that percentage of rows in their selected MS-level table.
 
-Processed tables contain `retention_time_min` and the available `total_ion_current` and `base_peak_intensity` columns. The retention-time unit is recorded as `time_unit="min"`. `scan_id`, `ms_level`, and `faims_cv` are removed from the processed table because they are represented in the table metadata. Source fields such as vendor, source path, generator, extraction time, precision, and row granularity are copied into `ProcessedTableMetadata`.
+Processed tables contain `retention_time_min` and the available `total_ion_current` and `base_peak_intensity` columns. The retention-time unit is recorded as `time_unit="min"`. `scan_id`, `ms_level`, and `faims_cv` are removed from the processed table because they are represented in the table metadata. Source fields such as vendor, source path, generator, extraction time, acquisition start time, precision, and row granularity are copied into `ProcessedTableMetadata`.
 
 Labels initially equal the raw-file name. Use `relabel_tables()` to create new processed-table instances with shortened or otherwise customized display labels without mutating the original results. Plotly figures, colors, line styles, channel controls, and HTML serialization belong to the later report layer.
 

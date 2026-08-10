@@ -90,6 +90,7 @@ class BrukerExtractor:
         if not tdf_path.is_file():
             raise FileNotFoundError(f"analysis.tdf not found in {resolved_input}")
 
+        acquisition_start_time = self._read_acquisition_start_time(tdf_path)
         frames = self._read_frames(tdf_path)
         summary = self._build_summary(
             frames,
@@ -129,6 +130,7 @@ class BrukerExtractor:
                 "spectrum",
                 source_path,
                 extracted_at,
+                acquisition_start_time,
             )
         if select_msn and len(msn_indices):
             msn_path = self._write_level(
@@ -140,6 +142,7 @@ class BrukerExtractor:
                 "frame-aggregate",
                 source_path,
                 extracted_at,
+                acquisition_start_time,
             )
 
         return ExtractionResult(ms1_path=ms1_path, msn_path=msn_path)
@@ -184,6 +187,49 @@ class BrukerExtractor:
                 [_nullable_float(row[3]) for row in rows], dtype=np.float64
             )
         return _Frames(scan_ids, retention_times, msms_types, total_ion_current)
+
+    @staticmethod
+    def _read_acquisition_start_time(tdf_path: Path) -> str:
+        with sqlite3.connect(tdf_path) as connection:
+            available_tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            if "GlobalMetadata" not in available_tables:
+                raise RuntimeError("GlobalMetadata table is missing from analysis.tdf")
+            columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(GlobalMetadata)")
+            }
+            missing_columns = {"Key", "Value"} - columns
+            if missing_columns:
+                missing = ", ".join(sorted(missing_columns))
+                raise RuntimeError(
+                    f"GlobalMetadata is missing required columns: {missing}"
+                )
+            row = connection.execute(
+                "SELECT Value FROM GlobalMetadata WHERE Key = ?",
+                ("AcquisitionDateTime",),
+            ).fetchone()
+
+        if row is None or not str(row[0]).strip():
+            raise RuntimeError("GlobalMetadata does not contain AcquisitionDateTime.")
+        value = str(row[0]).strip()
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        try:
+            acquisition_time = datetime.fromisoformat(value)
+        except ValueError as error:
+            raise RuntimeError(
+                "GlobalMetadata AcquisitionDateTime is not an ISO-8601 timestamp."
+            ) from error
+        if acquisition_time.tzinfo is None:
+            raise RuntimeError(
+                "GlobalMetadata AcquisitionDateTime must include a timezone."
+            )
+        return acquisition_time.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @staticmethod
     def _read_dia_ms2_ids(tdf_path: Path) -> set[int]:
@@ -290,6 +336,7 @@ class BrukerExtractor:
         row_granularity: Literal["spectrum", "frame-aggregate"],
         source_path: str,
         extracted_at: str,
+        acquisition_start_time: str,
     ) -> Path:
         trace_type = pa.float32() if precision_mode == "low" else pa.float64()
         values: dict[str, pa.Array] = {
@@ -325,6 +372,7 @@ class BrukerExtractor:
             row_granularity=row_granularity,
             source_path=Path(source_path),
             extracted_at=extracted_at,
+            acquisition_start_time=acquisition_start_time,
             generator=f"rawtrace-qc-bruker/{_package_version()}",
         )
 

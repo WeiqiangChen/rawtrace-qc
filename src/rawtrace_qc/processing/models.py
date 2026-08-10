@@ -80,6 +80,7 @@ class ProcessedTableMetadata:
     vendor: str
     ms_level_file: str
     extracted_at: str
+    acquisition_start_time: str
     ms_level: int
     faims_cv: float | str | None
     row_granularity: str

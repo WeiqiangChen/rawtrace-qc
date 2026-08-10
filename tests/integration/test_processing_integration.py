@@ -27,6 +27,7 @@ def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
         row_granularity="spectrum",
         source_path=source_path,
         extracted_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        acquisition_start_time="2026-08-04T10:00:00Z",
         generator="integration-test/1.0",
     )
     msn_path = write_trace(
@@ -46,6 +47,7 @@ def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
         row_granularity="frame-aggregate",
         source_path=source_path,
         extracted_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        acquisition_start_time="2026-08-04T10:00:00Z",
         generator="integration-test/1.0",
     )
 

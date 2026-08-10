@@ -30,6 +30,7 @@ def _metadata(
         "row_granularity": row_granularity,
         "source_path": source_path,
         "extracted_at": "2026-08-05T12:00:00Z",
+        "acquisition_start_time": "2026-08-05T10:00:00Z",
     }
 
 
@@ -123,6 +124,7 @@ class TestProcessTraces:
         assert processed[0].metadata.ms_level_file == "msn"
         assert processed[0].metadata.generator == "test/1.0"
         assert processed[0].metadata.extracted_at == "2026-08-05T12:00:00Z"
+        assert processed[0].metadata.acquisition_start_time == "2026-08-05T10:00:00Z"
         assert processed[0].metadata.row_granularity == "frame-aggregate"
 
     def test_split_faims_creates_one_table_per_cv(self) -> None:
