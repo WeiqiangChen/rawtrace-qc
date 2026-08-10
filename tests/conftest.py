@@ -3,7 +3,6 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 
@@ -12,7 +11,6 @@ def bruker_fixture(tmp_path: Path) -> Path:
     acquisition_path = tmp_path / "sample.d"
     acquisition_path.mkdir()
     _create_tdf(acquisition_path / "analysis.tdf")
-    _create_chromatography_database(acquisition_path / "chromatography-data.sqlite")
     return acquisition_path
 
 
@@ -41,22 +39,4 @@ def _create_tdf(path: Path) -> None:
         )
         connection.execute("CREATE TABLE DiaFrameMsMsInfo (Frame INTEGER PRIMARY KEY, WindowGroup INTEGER NOT NULL)")
         connection.execute("INSERT INTO DiaFrameMsMsInfo VALUES (3, 1)")
-        connection.commit()
-
-
-def _create_chromatography_database(path: Path) -> None:
-    with sqlite3.connect(path) as connection:
-        connection.execute("CREATE TABLE TraceSources (Id INTEGER PRIMARY KEY, Description TEXT NOT NULL)")
-        connection.execute(
-            "CREATE TABLE TraceChunks (Trace INTEGER NOT NULL, Times BLOB NOT NULL, Intensities BLOB NOT NULL)"
-        )
-        connection.execute("INSERT INTO TraceSources VALUES (?, ?)", (1, "BPC,±MS"))
-        connection.execute(
-            "INSERT INTO TraceChunks VALUES (?, ?, ?)",
-            (
-                1,
-                np.asarray([1.0, 2.0, 3.0], dtype=np.float64).tobytes(),
-                np.asarray([10.0, 20.0, 30.0], dtype=np.float32).tobytes(),
-            ),
-        )
         connection.commit()

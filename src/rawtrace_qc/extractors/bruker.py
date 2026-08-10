@@ -15,7 +15,6 @@ import pyarrow as pa
 from rawtrace_qc.models import ExtractionResult
 from rawtrace_qc.traces import write_trace
 
-BPC_TRACE_DESCRIPTION = "BPC,±MS"
 PrecisionMode = Literal["low", "high"]
 
 
@@ -27,6 +26,7 @@ class _Frames:
     retention_time_sec: np.ndarray
     msms_type: np.ndarray
     total_ion_current: np.ndarray | None
+    base_peak_intensity: np.ndarray | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,10 +43,10 @@ class _Summary:
 class BrukerExtractor:
     """Create scan-table Parquet files from a Bruker timsTOF `.d` folder.
 
-    The initial extractor reads frame metadata from `analysis.tdf` and the
-    precomputed BPC trace from `chromatography-data.sqlite`. Bruker MSn rows
-    remain frame aggregates because per-isolation-event data requires decoding
-    `analysis.tdf_bin`.
+    The extractor reads native frame metadata from `analysis.tdf`, including
+    total ion current and base-peak intensity when those columns are available.
+    Bruker MSn rows remain frame aggregates because per-isolation-event data
+    requires decoding `analysis.tdf_bin`.
     """
 
     def extract(
@@ -94,7 +94,6 @@ class BrukerExtractor:
         frames = self._read_frames(tdf_path)
         summary = self._build_summary(
             frames,
-            self._read_bpc(resolved_input / "chromatography-data.sqlite"),
             self._read_dia_ms2_ids(tdf_path),
         )
         if not select_ms1 and not select_msn:
@@ -163,8 +162,10 @@ class BrukerExtractor:
                 if "SummedIntensities" in available_columns
                 else ""
             )
+            bpi_select = ", MaxIntensity" if "MaxIntensity" in available_columns else ""
             rows = connection.execute(
-                f"SELECT Id, Time, MsMsType{tic_select} FROM Frames ORDER BY Id"
+                f"SELECT Id, Time, MsMsType{tic_select}{bpi_select} "
+                "FROM Frames ORDER BY Id"
             ).fetchall()
 
         try:
@@ -182,11 +183,24 @@ class BrukerExtractor:
                 "Frames contains invalid required scan-table values."
             ) from error
         total_ion_current = None
+        base_peak_intensity = None
+        optional_index = 3
         if tic_select:
             total_ion_current = np.asarray(
-                [_nullable_float(row[3]) for row in rows], dtype=np.float64
+                [_nullable_float(row[optional_index]) for row in rows], dtype=np.float64
             )
-        return _Frames(scan_ids, retention_times, msms_types, total_ion_current)
+            optional_index += 1
+        if bpi_select:
+            base_peak_intensity = np.asarray(
+                [_nullable_float(row[optional_index]) for row in rows], dtype=np.float64
+            )
+        return _Frames(
+            scan_ids,
+            retention_times,
+            msms_types,
+            total_ion_current,
+            base_peak_intensity,
+        )
 
     @staticmethod
     def _read_acquisition_start_time(tdf_path: Path) -> str:
@@ -256,74 +270,19 @@ class BrukerExtractor:
             }
 
     @staticmethod
-    def _read_bpc(chromatography_path: Path) -> tuple[np.ndarray, np.ndarray] | None:
-        if not chromatography_path.is_file():
-            return None
-        try:
-            with sqlite3.connect(chromatography_path) as connection:
-                source_row = connection.execute(
-                    "SELECT Id FROM TraceSources WHERE Description = ?",
-                    (BPC_TRACE_DESCRIPTION,),
-                ).fetchone()
-                if source_row is None:
-                    return None
-                chunks = connection.execute(
-                    "SELECT Times, Intensities FROM TraceChunks "
-                    "WHERE Trace = ? ORDER BY rowid",
-                    (source_row[0],),
-                ).fetchall()
-        except sqlite3.Error:
-            return None
-
-        times: list[np.ndarray] = []
-        intensities: list[np.ndarray] = []
-        for chunk_times, chunk_intensities in chunks:
-            time_values = np.frombuffer(chunk_times, dtype=np.float64)
-            intensity_values = np.frombuffer(chunk_intensities, dtype=np.float32)
-            size = min(len(time_values), len(intensity_values))
-            if size:
-                times.append(time_values[:size])
-                intensities.append(intensity_values[:size])
-        if not times:
-            return None
-        bpc_times = np.concatenate(times)
-        bpc_intensities = np.concatenate(intensities)
-        valid = np.isfinite(bpc_times) & np.isfinite(bpc_intensities)
-        if not np.any(valid):
-            return None
-        order = np.argsort(bpc_times[valid], kind="stable")
-        sorted_times = bpc_times[valid][order]
-        sorted_intensities = bpc_intensities[valid][order]
-        unique_times, unique_indices = np.unique(sorted_times, return_index=True)
-        return unique_times, sorted_intensities[unique_indices]
-
-    @staticmethod
     def _build_summary(
         frames: _Frames,
-        bpc: tuple[np.ndarray, np.ndarray] | None,
         dia_ms2_ids: set[int],
     ) -> _Summary:
         ms_level = np.where(frames.msms_type == 0, 1, 2).astype(np.int8)
         if dia_ms2_ids:
             ms_level[np.isin(frames.scan_id, list(dia_ms2_ids))] = 2
-        base_peak_intensity = None
-        if bpc is not None:
-            base_peak_intensity = np.asarray(
-                np.interp(
-                    frames.retention_time_sec,
-                    bpc[0],
-                    bpc[1],
-                    left=np.nan,
-                    right=np.nan,
-                ),
-                dtype=np.float64,
-            )
         return _Summary(
             frames.scan_id,
             frames.retention_time_sec,
             ms_level,
             frames.total_ion_current,
-            base_peak_intensity,
+            frames.base_peak_intensity,
         )
 
     @staticmethod

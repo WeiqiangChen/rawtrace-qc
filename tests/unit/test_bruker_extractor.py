@@ -10,7 +10,7 @@ from rawtrace_qc.traces import load_trace
 
 
 class TestBrukerExtractor:
-    def test_default_selection_writes_both_levels_and_uses_bpc(self, bruker_fixture: Path) -> None:
+    def test_default_selection_writes_both_levels_and_uses_native_frame_intensities(self, bruker_fixture: Path) -> None:
         result = BrukerExtractor().extract(bruker_fixture, output_directory=bruker_fixture / "out")
 
         assert result.ms1_path is not None
@@ -28,7 +28,8 @@ class TestBrukerExtractor:
         assert ms1.metadata["acquisition_start_time"] == "2026-08-01T12:30:15Z"
         assert msn.metadata["acquisition_start_time"] == "2026-08-01T12:30:15Z"
         assert msn.table["scan_id"].to_pylist() == [2, 3]
-        assert msn.table["base_peak_intensity"].to_pylist() == [20.0, 30.0]
+        assert ms1.table["base_peak_intensity"].to_pylist() == [100.0]
+        assert msn.table["base_peak_intensity"].to_pylist() == [200.0, 300.0]
 
     @pytest.mark.parametrize(
         ("select_ms1", "select_msn", "ms1_expected", "msn_expected"),
