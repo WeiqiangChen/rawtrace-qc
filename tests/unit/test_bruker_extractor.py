@@ -31,6 +31,23 @@ class TestBrukerExtractor:
         assert ms1.table["base_peak_intensity"].to_pylist() == [100.0]
         assert msn.table["base_peak_intensity"].to_pylist() == [200.0, 300.0]
 
+    def test_zero_ms1_rows_write_empty_artifact(self, bruker_fixture: Path, tmp_path: Path) -> None:
+        with sqlite3.connect(bruker_fixture / "analysis.tdf") as connection:
+            connection.execute("UPDATE Frames SET MsMsType = 8")
+            connection.execute("DELETE FROM DiaFrameMsMsInfo")
+            connection.commit()
+
+        result = BrukerExtractor().extract(
+            bruker_fixture,
+            output_directory=tmp_path / "empty-ms1",
+        )
+
+        assert result.ms1_path is not None
+        assert result.msn_path is not None
+        ms1 = load_trace(result.ms1_path)
+        assert ms1.table.num_rows == 0
+        assert ms1.metadata["ms_level_file"] == "ms1"
+
     def test_rows_are_ordered_by_retention_time_then_scan_id(self, bruker_fixture: Path, tmp_path: Path) -> None:
         with sqlite3.connect(bruker_fixture / "analysis.tdf") as connection:
             connection.executemany(

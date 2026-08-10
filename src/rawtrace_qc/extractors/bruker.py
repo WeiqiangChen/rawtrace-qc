@@ -81,8 +81,8 @@ class BrukerExtractor:
         Raises:
             FileNotFoundError: If `analysis.tdf` is missing.
             ValueError: If an argument or input path is invalid.
-            RuntimeError: If a selected level is absent or required frame data
-                cannot form a valid table.
+            RuntimeError: If an explicitly MSn-only selection has no MSn frames,
+                or required frame data cannot form a valid table.
         """
         _validate_options(input_path, output_name, precision_mode)
         resolved_input = input_path.expanduser().resolve()
@@ -102,8 +102,6 @@ class BrukerExtractor:
         select_all_levels = select_ms1 and select_msn
         ms1_indices = np.flatnonzero(summary.ms_level == 1)
         msn_indices = np.flatnonzero(summary.ms_level > 1)
-        if select_ms1 and not len(ms1_indices):
-            raise RuntimeError("The input folder contains no MS1 frames.")
         if select_msn and not select_all_levels and not len(msn_indices):
             raise RuntimeError("The input folder contains no MSn frames.")
 
