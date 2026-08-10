@@ -165,7 +165,7 @@ class BrukerExtractor:
             bpi_select = ", MaxIntensity" if "MaxIntensity" in available_columns else ""
             rows = connection.execute(
                 f"SELECT Id, Time, MsMsType{tic_select}{bpi_select} "
-                "FROM Frames ORDER BY Id"
+                "FROM Frames ORDER BY Time, Id"
             ).fetchall()
 
         try:
@@ -182,6 +182,13 @@ class BrukerExtractor:
             raise RuntimeError(
                 "Frames contains invalid required scan-table values."
             ) from error
+        unique_scan_ids, counts = np.unique(scan_ids, return_counts=True)
+        duplicate_scan_ids = unique_scan_ids[counts > 1]
+        if duplicate_scan_ids.size:
+            raise RuntimeError(
+                "Frames contains duplicate scan_id values: "
+                f"{duplicate_scan_ids.tolist()!r}. Each Frames.Id must be unique."
+            )
         total_ion_current = None
         base_peak_intensity = None
         optional_index = 3

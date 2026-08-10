@@ -31,6 +31,44 @@ class TestBrukerExtractor:
         assert ms1.table["base_peak_intensity"].to_pylist() == [100.0]
         assert msn.table["base_peak_intensity"].to_pylist() == [200.0, 300.0]
 
+    def test_rows_are_ordered_by_retention_time_then_scan_id(self, bruker_fixture: Path, tmp_path: Path) -> None:
+        with sqlite3.connect(bruker_fixture / "analysis.tdf") as connection:
+            connection.executemany(
+                "UPDATE Frames SET Time = ? WHERE Id = ?",
+                [(2.0, 1), (1.0, 2), (1.0, 3)],
+            )
+            connection.execute("UPDATE Frames SET MsMsType = 0")
+            connection.execute("DELETE FROM DiaFrameMsMsInfo")
+            connection.commit()
+
+        result = BrukerExtractor().extract(
+            bruker_fixture,
+            output_directory=tmp_path / "ordered",
+            select_msn=False,
+        )
+
+        assert result.ms1_path is not None
+        artifact = load_trace(result.ms1_path)
+        assert artifact.table["scan_id"].to_pylist() == [2, 3, 1]
+        assert artifact.table["retention_time_sec"].to_pylist() == [1.0, 1.0, 2.0]
+
+    def test_duplicate_frame_ids_are_rejected(self, bruker_fixture: Path, tmp_path: Path) -> None:
+        with sqlite3.connect(bruker_fixture / "analysis.tdf") as connection:
+            connection.execute("ALTER TABLE Frames RENAME TO OriginalFrames")
+            connection.execute("CREATE TABLE Frames (Id INTEGER, Time REAL, MsMsType INTEGER)")
+            connection.executemany(
+                "INSERT INTO Frames VALUES (?, ?, ?)",
+                [(1, 1.0, 0), (1, 2.0, 0)],
+            )
+            connection.commit()
+
+        with pytest.raises(RuntimeError, match="duplicate scan_id"):
+            BrukerExtractor().extract(
+                bruker_fixture,
+                output_directory=tmp_path / "duplicate",
+                select_msn=False,
+            )
+
     @pytest.mark.parametrize(
         ("select_ms1", "select_msn", "ms1_expected", "msn_expected"),
         [(True, False, True, False), (False, True, False, True)],
