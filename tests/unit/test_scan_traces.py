@@ -31,7 +31,6 @@ def _metadata(ms_level_file: str = "ms1") -> dict[bytes, bytes]:
             "ms_level_file": ms_level_file,
             "precision_mode": "low",
             "row_granularity": "spectrum",
-            "source_path": "C:/sample.d",
             "extracted_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "acquisition_start_time": "2026-08-04T10:00:00Z",
         }.items()
@@ -47,7 +46,6 @@ class TestScanTraceWriting:
             ms_level_file="ms1",
             precision_mode="low",
             row_granularity="spectrum",
-            source_path=tmp_path / "sample.d",
             extracted_at="2026-08-04T12:00:00Z",
             acquisition_start_time="2026-08-04T10:00:00Z",
             generator="test/1.0",

@@ -116,7 +116,6 @@ class MetadataField(StrEnum):
     MS_LEVEL_FILE = "ms_level_file"
     PRECISION_MODE = "precision_mode"
     ROW_GRANULARITY = "row_granularity"
-    SOURCE_PATH = "source_path"
     EXTRACTED_AT = "extracted_at"
     ACQUISITION_START_TIME = "acquisition_start_time"
 

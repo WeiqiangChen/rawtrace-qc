@@ -17,7 +17,6 @@ from rawtrace_qc.traces import TraceArtifact
 
 def _metadata(
     *,
-    source_path: str = "C:/raw/sample.d",
     row_granularity: str = "spectrum",
     ms_level_file: str = "msn",
 ) -> dict[str, str]:
@@ -28,7 +27,6 @@ def _metadata(
         "ms_level_file": ms_level_file,
         "precision_mode": "low",
         "row_granularity": row_granularity,
-        "source_path": source_path,
         "extracted_at": "2026-08-05T12:00:00Z",
         "acquisition_start_time": "2026-08-05T10:00:00Z",
     }
@@ -50,7 +48,7 @@ def _artifact(
             }
         )
     return TraceArtifact(
-        path=Path("sample.trace.parquet"),
+        path=Path("sample.d.ms1-trace.parquet"),
         table=table,
         metadata=metadata or _metadata(),
     )
@@ -107,19 +105,13 @@ class TestProcessTraces:
         assert "scan_id" not in processed[0].table.column_names
         assert "ms_level" not in processed[0].table.column_names
 
-    def test_processing_can_select_ms3_and_copies_source_metadata(self) -> None:
-        artifact = _artifact(
-            metadata=_metadata(
-                source_path="D:/runs/bruker/sample.d",
-                row_granularity="frame-aggregate",
-            )
-        )
+    def test_processing_can_select_ms3_and_copies_trace_metadata(self) -> None:
+        artifact = _artifact(metadata=_metadata(row_granularity="frame-aggregate"))
 
         processed = process_traces([artifact], options=ProcessingOptions(ms_levels=(3,)))
 
         assert len(processed) == 1
         assert processed[0].metadata.ms_level == 3
-        assert processed[0].metadata.source_path == Path("D:/runs/bruker/sample.d")
         assert processed[0].metadata.schema_version == "1"
         assert processed[0].metadata.ms_level_file == "msn"
         assert processed[0].metadata.generator == "test/1.0"

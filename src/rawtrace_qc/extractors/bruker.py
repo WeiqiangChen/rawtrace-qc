@@ -113,7 +113,6 @@ class BrukerExtractor:
         destination_directory.mkdir(parents=True, exist_ok=True)
         file_stem = output_name or resolved_input.name
         extracted_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-        source_path = str(resolved_input)
         ms1_path = None
         msn_path = None
 
@@ -125,7 +124,6 @@ class BrukerExtractor:
                 "ms1",
                 precision_mode,
                 "spectrum",
-                source_path,
                 extracted_at,
                 acquisition_start_time,
             )
@@ -137,7 +135,6 @@ class BrukerExtractor:
                 "msn",
                 precision_mode,
                 "frame-aggregate",
-                source_path,
                 extracted_at,
                 acquisition_start_time,
             )
@@ -298,7 +295,6 @@ class BrukerExtractor:
         ms_level_file: Literal["ms1", "msn"],
         precision_mode: PrecisionMode,
         row_granularity: Literal["spectrum", "frame-aggregate"],
-        source_path: str,
         extracted_at: str,
         acquisition_start_time: str,
     ) -> Path:
@@ -334,7 +330,6 @@ class BrukerExtractor:
             ms_level_file=ms_level_file,
             precision_mode=precision_mode,
             row_granularity=row_granularity,
-            source_path=Path(source_path),
             extracted_at=extracted_at,
             acquisition_start_time=acquisition_start_time,
             generator=f"rawtrace-qc-bruker/{_package_version()}",

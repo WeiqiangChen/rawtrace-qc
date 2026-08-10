@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import replace
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -22,17 +22,6 @@ from rawtrace_qc.traces import TraceArtifact, validate_trace
 _REPORT_CHANNELS = ("total_ion_current", "base_peak_intensity")
 _ARROW_EQUAL = pc.__dict__["equal"]
 _ARROW_DIVIDE = pc.__dict__["divide"]
-_SOURCE_METADATA_FIELDS = (
-    "schema_version",
-    "generator",
-    "vendor",
-    "ms_level_file",
-    "precision_mode",
-    "row_granularity",
-    "source_path",
-    "extracted_at",
-    "acquisition_start_time",
-)
 
 
 def process_traces(
@@ -208,14 +197,10 @@ def _create_processed_table(
     processed_table = pa.Table.from_arrays(processed_columns, names=processed_names)
 
     source_metadata = artifact.metadata
-    source_path = Path(source_metadata["source_path"])
-    rawfile_name = PureWindowsPath(source_metadata["source_path"]).name
-    if not rawfile_name:
-        rawfile_name = source_path.name or source_metadata["source_path"]
+    rawfile_name = _rawfile_name(artifact.path)
     metadata = ProcessedTableMetadata(
         rawfile_name=rawfile_name,
         label=rawfile_name,
-        source_path=source_path,
         schema_version=source_metadata["schema_version"],
         generator=source_metadata["generator"],
         vendor=source_metadata["vendor"],
@@ -230,3 +215,10 @@ def _create_processed_table(
         channels=tuple(channels),
     )
     return ProcessedTable(processed_table, metadata)
+
+
+def _rawfile_name(trace_path: Path) -> str:
+    for suffix in (".ms1-trace.parquet", ".msn-trace.parquet"):
+        if trace_path.name.endswith(suffix):
+            return trace_path.name.removesuffix(suffix)
+    return trace_path.stem

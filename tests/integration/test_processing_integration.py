@@ -9,7 +9,6 @@ from rawtrace_qc.traces import load_trace, write_trace
 
 
 def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
-    source_path = tmp_path / "integration-sample.d"
     ms1_path = write_trace(
         pa.table(
             {
@@ -20,12 +19,11 @@ def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
                 "faims_cv": pa.array([-50.0]),
             }
         ),
-        tmp_path / "integration-sample.ms1-trace.parquet",
+        tmp_path / "integration-sample.d.ms1-trace.parquet",
         vendor="bruker",
         ms_level_file="ms1",
         precision_mode="high",
         row_granularity="spectrum",
-        source_path=source_path,
         extracted_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         acquisition_start_time="2026-08-04T10:00:00Z",
         generator="integration-test/1.0",
@@ -40,12 +38,11 @@ def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
                 "faims_cv": pa.array([-50.0, -60.0]),
             }
         ),
-        tmp_path / "integration-sample.msn-trace.parquet",
+        tmp_path / "integration-sample.d.msn-trace.parquet",
         vendor="bruker",
         ms_level_file="msn",
         precision_mode="high",
         row_granularity="frame-aggregate",
-        source_path=source_path,
         extracted_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         acquisition_start_time="2026-08-04T10:00:00Z",
         generator="integration-test/1.0",

@@ -74,7 +74,6 @@ def write_trace(
     ms_level_file: str,
     precision_mode: str,
     row_granularity: str,
-    source_path: Path,
     extracted_at: str,
     acquisition_start_time: str,
     generator: str,
@@ -88,7 +87,6 @@ def write_trace(
         ms_level_file: File level identifier, either `ms1` or `msn`.
         precision_mode: Trace precision identifier, either `low` or `high`.
         row_granularity: Row meaning, either `spectrum` or `frame-aggregate`.
-        source_path: Resolved path to the original acquisition.
         extracted_at: ISO-8601 UTC extraction timestamp.
         acquisition_start_time: ISO-8601 UTC source acquisition start timestamp.
         generator: Name and version of the producing extractor.
@@ -107,7 +105,6 @@ def write_trace(
         "ms_level_file": ms_level_file,
         "precision_mode": precision_mode,
         "row_granularity": row_granularity,
-        "source_path": str(source_path),
         "extracted_at": extracted_at,
         "acquisition_start_time": acquisition_start_time,
     }
@@ -264,8 +261,6 @@ def _validate_metadata(metadata: Mapping[str, str]) -> None:
         raise ArtifactValidationError(
             "Metadata vendor and generator must not be empty."
         )
-    if not metadata["source_path"].strip():
-        raise ArtifactValidationError("Metadata source_path must not be empty.")
     for field_name in ("extracted_at", "acquisition_start_time"):
         try:
             datetime.fromisoformat(metadata[field_name].replace("Z", "+00:00"))

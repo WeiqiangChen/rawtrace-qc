@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import StrEnum
-from pathlib import Path
 
 import pyarrow as pa
 
@@ -74,7 +73,6 @@ class ProcessedTableMetadata:
 
     rawfile_name: str
     label: str
-    source_path: Path
     schema_version: str
     generator: str
     vendor: str
