@@ -113,6 +113,7 @@ class MetadataField(StrEnum):
     SCHEMA_VERSION = "schema_version"
     GENERATOR = "generator"
     VENDOR = "vendor"
+    SOURCE_FILENAME = "source_filename"
     MS_LEVEL_FILE = "ms_level_file"
     PRECISION_MODE = "precision_mode"
     ROW_GRANULARITY = "row_granularity"

@@ -124,6 +124,7 @@ class BrukerExtractor:
                 "ms1",
                 precision_mode,
                 "spectrum",
+                resolved_input.name,
                 extracted_at,
                 acquisition_start_time,
             )
@@ -135,6 +136,7 @@ class BrukerExtractor:
                 "msn",
                 precision_mode,
                 "frame-aggregate",
+                resolved_input.name,
                 extracted_at,
                 acquisition_start_time,
             )
@@ -295,6 +297,7 @@ class BrukerExtractor:
         ms_level_file: Literal["ms1", "msn"],
         precision_mode: PrecisionMode,
         row_granularity: Literal["spectrum", "frame-aggregate"],
+        source_filename: str,
         extracted_at: str,
         acquisition_start_time: str,
     ) -> Path:
@@ -327,6 +330,7 @@ class BrukerExtractor:
             table,
             output_path,
             vendor="bruker",
+            source_filename=source_filename,
             ms_level_file=ms_level_file,
             precision_mode=precision_mode,
             row_granularity=row_granularity,

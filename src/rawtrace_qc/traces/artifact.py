@@ -71,6 +71,7 @@ def write_trace(
     output_path: Path,
     *,
     vendor: str,
+    source_filename: str,
     ms_level_file: str,
     precision_mode: str,
     row_granularity: str,
@@ -84,6 +85,7 @@ def write_trace(
         table: Arrow table containing scan-trace rows.
         output_path: Destination path. Existing files are overwritten.
         vendor: Source vendor identifier such as `bruker` or `thermo`.
+        source_filename: Original source filename, including its extension.
         ms_level_file: File level identifier, either `ms1` or `msn`.
         precision_mode: Trace precision identifier, either `low` or `high`.
         row_granularity: Row meaning, either `spectrum` or `frame-aggregate`.
@@ -102,6 +104,7 @@ def write_trace(
         "schema_version": SCHEMA_VERSION,
         "generator": generator,
         "vendor": vendor,
+        "source_filename": source_filename,
         "ms_level_file": ms_level_file,
         "precision_mode": precision_mode,
         "row_granularity": row_granularity,
@@ -257,9 +260,13 @@ def _validate_metadata(metadata: Mapping[str, str]) -> None:
         raise ArtifactValidationError(
             "Metadata row_granularity must be 'spectrum' or 'frame-aggregate'."
         )
-    if not metadata["vendor"].strip() or not metadata["generator"].strip():
+    if (
+        not metadata["vendor"].strip()
+        or not metadata["generator"].strip()
+        or not metadata["source_filename"].strip()
+    ):
         raise ArtifactValidationError(
-            "Metadata vendor and generator must not be empty."
+            "Metadata vendor, generator, and source_filename must not be empty."
         )
     for field_name in ("extracted_at", "acquisition_start_time"):
         try:

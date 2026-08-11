@@ -24,6 +24,7 @@ def _metadata(
         "schema_version": "1",
         "generator": "test/1.0",
         "vendor": "bruker",
+        "source_filename": "sample.d",
         "ms_level_file": ms_level_file,
         "precision_mode": "low",
         "row_granularity": row_granularity,

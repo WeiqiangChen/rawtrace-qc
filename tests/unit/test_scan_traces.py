@@ -28,6 +28,7 @@ def _metadata(ms_level_file: str = "ms1") -> dict[bytes, bytes]:
             "schema_version": "1",
             "generator": "test/1.0",
             "vendor": "bruker",
+            "source_filename": "sample.d",
             "ms_level_file": ms_level_file,
             "precision_mode": "low",
             "row_granularity": "spectrum",
@@ -43,6 +44,7 @@ class TestScanTraceWriting:
             _table(),
             tmp_path / "sample.ms1-trace.parquet",
             vendor="bruker",
+            source_filename="sample.d",
             ms_level_file="ms1",
             precision_mode="low",
             row_granularity="spectrum",
@@ -55,6 +57,7 @@ class TestScanTraceWriting:
 
         assert artifact.table.equals(_table())
         assert artifact.metadata["vendor"] == "bruker"
+        assert artifact.metadata["source_filename"] == "sample.d"
         assert pq.ParquetFile(path).metadata.row_group(0).column(0).compression == "SNAPPY"
 
 
