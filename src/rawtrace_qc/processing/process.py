@@ -200,6 +200,7 @@ def _create_processed_table(
     metadata = ProcessedTableMetadata(
         rawfile_name=rawfile_name,
         label=rawfile_name,
+        source_id=source_metadata.get("source_id"),
         schema_version=source_metadata["schema_version"],
         generator=source_metadata["generator"],
         vendor=source_metadata["vendor"],

@@ -22,6 +22,7 @@ def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
         tmp_path / "integration-sample.d.ms1-trace.parquet",
         vendor="bruker",
         source_filename="integration-sample.d",
+        source_id="78d629b2-0edc-4f60-b942-979a46b94ac8",
         ms_level_file="ms1",
         precision_mode="high",
         row_granularity="spectrum",
@@ -42,6 +43,7 @@ def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
         tmp_path / "integration-sample.d.msn-trace.parquet",
         vendor="bruker",
         source_filename="integration-sample.d",
+        source_id="78d629b2-0edc-4f60-b942-979a46b94ac8",
         ms_level_file="msn",
         precision_mode="high",
         row_granularity="frame-aggregate",
@@ -54,5 +56,6 @@ def test_written_trace_can_be_loaded_and_processed(tmp_path: Path) -> None:
 
     assert [(item.metadata.ms_level, item.metadata.faims_cv) for item in processed] == [(1, -50.0), (2, -50.0)]
     assert processed[0].metadata.rawfile_name == "integration-sample.d"
+    assert processed[0].metadata.source_id == "78d629b2-0edc-4f60-b942-979a46b94ac8"
     assert processed[0].metadata.precision == "high"
     assert processed[0].table["retention_time_min"].to_pylist() == [1.0]

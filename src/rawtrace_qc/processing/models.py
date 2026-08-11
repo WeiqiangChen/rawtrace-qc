@@ -73,6 +73,7 @@ class ProcessedTableMetadata:
 
     rawfile_name: str
     label: str
+    source_id: str | None
     schema_version: str
     generator: str
     vendor: str

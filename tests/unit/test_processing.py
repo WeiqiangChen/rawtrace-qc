@@ -25,6 +25,7 @@ def _metadata(
         "generator": "test/1.0",
         "vendor": "bruker",
         "source_filename": "sample.d",
+        "source_id": "78d629b2-0edc-4f60-b942-979a46b94ac8",
         "ms_level_file": ms_level_file,
         "precision_mode": "low",
         "row_granularity": row_granularity,
@@ -89,6 +90,7 @@ class TestProcessTraces:
         assert [item.metadata.ms_level for item in processed] == [2]
         assert processed[0].metadata.rawfile_name == "sample.d"
         assert processed[0].metadata.label == "sample.d"
+        assert processed[0].metadata.source_id == "78d629b2-0edc-4f60-b942-979a46b94ac8"
         assert processed[0].metadata.vendor == "bruker"
         assert processed[0].metadata.row_granularity == "spectrum"
         assert processed[0].metadata.time_unit == "min"
@@ -116,6 +118,7 @@ class TestProcessTraces:
         assert processed[0].metadata.schema_version == "1"
         assert processed[0].metadata.ms_level_file == "msn"
         assert processed[0].metadata.generator == "test/1.0"
+        assert processed[0].metadata.source_id == "78d629b2-0edc-4f60-b942-979a46b94ac8"
         assert processed[0].metadata.extracted_at == "2026-08-05T12:00:00Z"
         assert processed[0].metadata.acquisition_start_time == "2026-08-05T10:00:00Z"
         assert processed[0].metadata.row_granularity == "frame-aggregate"
