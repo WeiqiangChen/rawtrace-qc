@@ -5,7 +5,6 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import replace
-from pathlib import Path
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -197,7 +196,7 @@ def _create_processed_table(
     processed_table = pa.Table.from_arrays(processed_columns, names=processed_names)
 
     source_metadata = artifact.metadata
-    rawfile_name = _rawfile_name(artifact.path)
+    rawfile_name = source_metadata["source_filename"]
     metadata = ProcessedTableMetadata(
         rawfile_name=rawfile_name,
         label=rawfile_name,
@@ -215,10 +214,3 @@ def _create_processed_table(
         channels=tuple(channels),
     )
     return ProcessedTable(processed_table, metadata)
-
-
-def _rawfile_name(trace_path: Path) -> str:
-    for suffix in (".ms1-trace.parquet", ".msn-trace.parquet"):
-        if trace_path.name.endswith(suffix):
-            return trace_path.name.removesuffix(suffix)
-    return trace_path.stem

@@ -49,7 +49,7 @@ def _artifact(
             }
         )
     return TraceArtifact(
-        path=Path("sample.d.ms1-trace.parquet"),
+        path=Path("generated-name.ms1-trace.parquet"),
         table=table,
         metadata=metadata or _metadata(),
     )
