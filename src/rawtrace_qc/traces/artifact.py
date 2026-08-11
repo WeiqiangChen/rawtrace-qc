@@ -13,6 +13,7 @@ import pyarrow.parquet as pq
 
 from rawtrace_qc.errors import ArtifactValidationError
 from rawtrace_qc.traces.schema import (
+    OPTIONAL_METADATA,
     REQUIRED_COLUMNS,
     REQUIRED_METADATA,
     SCHEMA_VERSION,
@@ -29,7 +30,7 @@ class TraceArtifact:
 
     path: Path
     table: pa.Table
-    metadata: Mapping[str, str]
+    metadata: Mapping[str, str | None]
 
 
 def load_trace(path: Path, *, strict: bool = True) -> TraceArtifact:
@@ -75,10 +76,11 @@ def write_trace(
     ms_level_file: str,
     precision_mode: str,
     row_granularity: str,
-    extracted_at: str,
-    acquisition_start_time: str,
-    generator: str,
+    extracted_at: str | None = None,
+    acquisition_start_time: str | None = None,
+    generator: str | None = None,
     source_id: str | None = None,
+    acquisition_path: str | None = None,
 ) -> Path:
     """Write a validated table as a schema-v1 Snappy Parquet artifact.
 
@@ -90,10 +92,12 @@ def write_trace(
         ms_level_file: File level identifier, either `ms1` or `msn`.
         precision_mode: Trace precision identifier, either `low` or `high`.
         row_granularity: Row meaning, either `spectrum` or `frame-aggregate`.
-        extracted_at: ISO-8601 UTC extraction timestamp.
-        acquisition_start_time: ISO-8601 UTC source acquisition start timestamp.
-        generator: Name and version of the producing extractor.
+        extracted_at: Optional ISO-8601 UTC extraction timestamp.
+        acquisition_start_time: Optional ISO-8601 UTC source acquisition start
+            timestamp.
+        generator: Optional name and version of the producing extractor.
         source_id: Optional unique source-run identifier.
+        acquisition_path: Optional vendor-recorded source acquisition path.
 
     Returns:
         The resolved destination path.
@@ -104,7 +108,6 @@ def write_trace(
     """
     metadata = {
         "schema_version": SCHEMA_VERSION,
-        "generator": generator,
         "vendor": vendor,
         "source_filename": source_filename,
         "ms_level_file": ms_level_file,
@@ -113,13 +116,22 @@ def write_trace(
         "extracted_at": extracted_at,
         "acquisition_start_time": acquisition_start_time,
     }
-    if source_id is not None:
-        metadata["source_id"] = source_id
+    metadata.update(
+        {
+            "generator": generator,
+            "source_id": source_id,
+            "acquisition_path": acquisition_path,
+        }
+    )
     validate_trace(table, metadata, strict=True)
 
     resolved_path = output_path.expanduser().resolve()
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
-    encoded_metadata = {key.encode(): value.encode() for key, value in metadata.items()}
+    encoded_metadata = {
+        key.encode(): value.encode()
+        for key, value in metadata.items()
+        if value is not None
+    }
     pq.write_table(
         table.replace_schema_metadata(encoded_metadata),
         resolved_path,
@@ -128,11 +140,13 @@ def write_trace(
     return resolved_path
 
 
-def _decode_metadata(raw_metadata: Mapping[bytes, bytes] | None) -> dict[str, str]:
+def _decode_metadata(
+    raw_metadata: Mapping[bytes, bytes] | None,
+) -> dict[str, str | None]:
     if raw_metadata is None:
-        return {}
+        return {field: None for field in OPTIONAL_METADATA}
     try:
-        return {
+        metadata: dict[str, str | None] = {
             key.decode("utf-8"): value.decode("utf-8")
             for key, value in raw_metadata.items()
         }
@@ -140,11 +154,14 @@ def _decode_metadata(raw_metadata: Mapping[bytes, bytes] | None) -> dict[str, st
         raise ArtifactValidationError(
             "Parquet metadata must contain UTF-8 text."
         ) from error
+    for field in OPTIONAL_METADATA:
+        metadata.setdefault(field, None)
+    return metadata
 
 
 def validate_trace(
     table: pa.Table,
-    metadata: Mapping[str, str],
+    metadata: Mapping[str, str | None],
     *,
     strict: bool = True,
 ) -> None:
@@ -215,7 +232,7 @@ def _validate_column_type(table: pa.Table, definition: ColumnDefinition) -> None
         )
 
 
-def _validate_levels(table: pa.Table, metadata: Mapping[str, str]) -> None:
+def _validate_levels(table: pa.Table, metadata: Mapping[str, str | None]) -> None:
     ms_level_file = metadata.get("ms_level_file")
     levels = table.column("ms_level").combine_chunks().to_pylist()
     if ms_level_file == "ms1" and any(level != 1 for level in levels):
@@ -242,43 +259,54 @@ def _validate_faims(table: pa.Table) -> None:
         )
 
 
-def _validate_metadata(metadata: Mapping[str, str]) -> None:
-    missing_metadata = REQUIRED_METADATA - set(metadata)
+def _validate_metadata(metadata: Mapping[str, str | None]) -> None:
+    missing_metadata = {
+        field for field in REQUIRED_METADATA if metadata.get(field) is None
+    }
     if missing_metadata:
         raise ArtifactValidationError(
             "Scan-trace is missing required metadata: "
             f"{', '.join(sorted(missing_metadata))}"
         )
-    if metadata["schema_version"] != SCHEMA_VERSION:
+    schema_version = metadata["schema_version"]
+    if schema_version != SCHEMA_VERSION:
         raise ArtifactValidationError(
-            f"Unsupported scan-trace schema version {metadata['schema_version']!r}; "
+            f"Unsupported scan-trace schema version {schema_version!r}; "
             f"expected {SCHEMA_VERSION!r}."
         )
-    if metadata["ms_level_file"] not in {"ms1", "msn"}:
+    ms_level_file = metadata["ms_level_file"]
+    if ms_level_file not in {"ms1", "msn"}:
         raise ArtifactValidationError("Metadata ms_level_file must be 'ms1' or 'msn'.")
-    if metadata["precision_mode"] not in {"low", "high"}:
+    precision_mode = metadata["precision_mode"]
+    if precision_mode not in {"low", "high"}:
         raise ArtifactValidationError(
             "Metadata precision_mode must be 'low' or 'high'."
         )
-    if metadata["row_granularity"] not in {"spectrum", "frame-aggregate"}:
+    row_granularity = metadata["row_granularity"]
+    if row_granularity not in {"spectrum", "frame-aggregate"}:
         raise ArtifactValidationError(
             "Metadata row_granularity must be 'spectrum' or 'frame-aggregate'."
         )
+    vendor = metadata["vendor"]
+    source_filename = metadata["source_filename"]
     if (
-        not metadata["vendor"].strip()
-        or not metadata["generator"].strip()
-        or not metadata["source_filename"].strip()
+        not isinstance(vendor, str)
+        or not vendor.strip()
+        or not isinstance(source_filename, str)
+        or not source_filename.strip()
     ):
         raise ArtifactValidationError(
-            "Metadata vendor, generator, and source_filename must not be empty."
+            "Metadata vendor and source_filename must not be empty."
         )
     for field_name in ("extracted_at", "acquisition_start_time"):
-        try:
-            datetime.fromisoformat(metadata[field_name].replace("Z", "+00:00"))
-        except ValueError as error:
-            raise ArtifactValidationError(
-                f"Metadata {field_name} must be an ISO-8601 timestamp."
-            ) from error
+        value = metadata.get(field_name)
+        if value is not None:
+            try:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as error:
+                raise ArtifactValidationError(
+                    f"Metadata {field_name} must be an ISO-8601 timestamp."
+                ) from error
 
 
 def _validate_compression(parquet_file: pq.ParquetFile) -> None:

@@ -75,11 +75,12 @@ class ProcessedTableMetadata:
     label: str
     source_id: str | None
     schema_version: str
-    generator: str
+    generator: str | None
     vendor: str
     ms_level_file: str
-    extracted_at: str
-    acquisition_start_time: str
+    extracted_at: str | None
+    acquisition_start_time: str | None
+    acquisition_path: str | None
     ms_level: int
     faims_cv: float | str | None
     row_granularity: str

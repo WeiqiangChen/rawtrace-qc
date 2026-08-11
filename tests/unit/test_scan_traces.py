@@ -39,6 +39,25 @@ def _metadata(ms_level_file: str = "ms1") -> dict[bytes, bytes]:
 
 
 class TestScanTraceWriting:
+    def test_write_allows_missing_recommended_metadata(self, tmp_path: Path) -> None:
+        path = write_trace(
+            _table(),
+            tmp_path / "minimal.ms1-trace.parquet",
+            vendor="bruker",
+            source_filename="sample.d",
+            ms_level_file="ms1",
+            precision_mode="low",
+            row_granularity="spectrum",
+        )
+
+        artifact = load_trace(path)
+
+        assert artifact.metadata["generator"] is None
+        assert artifact.metadata["extracted_at"] is None
+        assert artifact.metadata["acquisition_start_time"] is None
+        assert artifact.metadata["source_id"] is None
+        assert artifact.metadata["acquisition_path"] is None
+
     def test_write_and_load_round_trip_returns_arrow_table_and_metadata(self, tmp_path: Path) -> None:
         path = write_trace(
             _table(),
@@ -64,6 +83,21 @@ class TestScanTraceWriting:
 
 
 class TestScanTraceValidation:
+    def test_load_fills_missing_recommended_metadata_with_none(self, tmp_path: Path) -> None:
+        metadata = _metadata()
+        for key in (b"generator", b"extracted_at", b"acquisition_start_time"):
+            metadata.pop(key)
+        path = tmp_path / "missing-recommended-metadata.parquet"
+        pq.write_table(_table().replace_schema_metadata(metadata), path, compression="snappy")
+
+        artifact = load_trace(path)
+
+        assert artifact.metadata["generator"] is None
+        assert artifact.metadata["extracted_at"] is None
+        assert artifact.metadata["acquisition_start_time"] is None
+        assert artifact.metadata["source_id"] is None
+        assert artifact.metadata["acquisition_path"] is None
+
     def test_public_validator_accepts_valid_trace(self) -> None:
         metadata = {key.decode(): value.decode() for key, value in _metadata().items()}
 

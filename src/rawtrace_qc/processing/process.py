@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import replace
+from typing import cast
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -196,22 +197,23 @@ def _create_processed_table(
     processed_table = pa.Table.from_arrays(processed_columns, names=processed_names)
 
     source_metadata = artifact.metadata
-    rawfile_name = source_metadata["source_filename"]
+    rawfile_name = cast(str, source_metadata["source_filename"])
     metadata = ProcessedTableMetadata(
         rawfile_name=rawfile_name,
         label=rawfile_name,
         source_id=source_metadata.get("source_id"),
-        schema_version=source_metadata["schema_version"],
-        generator=source_metadata["generator"],
-        vendor=source_metadata["vendor"],
-        ms_level_file=source_metadata["ms_level_file"],
-        extracted_at=source_metadata["extracted_at"],
-        acquisition_start_time=source_metadata["acquisition_start_time"],
+        schema_version=cast(str, source_metadata["schema_version"]),
+        generator=source_metadata.get("generator"),
+        vendor=cast(str, source_metadata["vendor"]),
+        ms_level_file=cast(str, source_metadata["ms_level_file"]),
+        extracted_at=source_metadata.get("extracted_at"),
+        acquisition_start_time=source_metadata.get("acquisition_start_time"),
+        acquisition_path=source_metadata.get("acquisition_path"),
         ms_level=ms_level,
         faims_cv=faims_cv,
-        row_granularity=source_metadata["row_granularity"],
+        row_granularity=cast(str, source_metadata["row_granularity"]),
         time_unit="min",
-        precision=source_metadata["precision_mode"],
+        precision=cast(str, source_metadata["precision_mode"]),
         channels=tuple(channels),
     )
     return ProcessedTable(processed_table, metadata)

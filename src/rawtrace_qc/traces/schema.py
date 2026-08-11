@@ -108,7 +108,7 @@ KNOWN_COLUMNS = frozenset(TRACE_COLUMN_BY_NAME)
 
 
 class MetadataField(StrEnum):
-    """Name a required schema-v1 Parquet metadata field."""
+    """Name a schema-v1 Parquet metadata field."""
 
     SCHEMA_VERSION = "schema_version"
     GENERATOR = "generator"
@@ -119,6 +119,21 @@ class MetadataField(StrEnum):
     ROW_GRANULARITY = "row_granularity"
     EXTRACTED_AT = "extracted_at"
     ACQUISITION_START_TIME = "acquisition_start_time"
+    SOURCE_ID = "source_id"
+    ACQUISITION_PATH = "acquisition_path"
 
 
-REQUIRED_METADATA = frozenset(field.value for field in MetadataField)
+REQUIRED_METADATA = frozenset(
+    field.value
+    for field in (
+        MetadataField.SCHEMA_VERSION,
+        MetadataField.VENDOR,
+        MetadataField.MS_LEVEL_FILE,
+        MetadataField.PRECISION_MODE,
+        MetadataField.ROW_GRANULARITY,
+        MetadataField.SOURCE_FILENAME,
+    )
+)
+OPTIONAL_METADATA = (
+    frozenset(field.value for field in MetadataField) - REQUIRED_METADATA
+)

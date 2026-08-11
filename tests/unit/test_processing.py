@@ -123,6 +123,20 @@ class TestProcessTraces:
         assert processed[0].metadata.acquisition_start_time == "2026-08-05T10:00:00Z"
         assert processed[0].metadata.row_granularity == "frame-aggregate"
 
+    def test_processing_preserves_missing_recommended_metadata_as_none(self) -> None:
+        metadata = _metadata()
+        metadata.pop("generator")
+        metadata.pop("extracted_at")
+        metadata.pop("acquisition_start_time")
+
+        processed = process_traces([_artifact(metadata=metadata)])
+
+        assert processed[0].metadata.generator is None
+        assert processed[0].metadata.extracted_at is None
+        assert processed[0].metadata.acquisition_start_time is None
+        assert processed[0].metadata.acquisition_path is None
+        assert processed[0].metadata.source_id == "78d629b2-0edc-4f60-b942-979a46b94ac8"
+
     def test_split_faims_creates_one_table_per_cv(self) -> None:
         table = _artifact().table.append_column("faims_cv", pa.array([-50.0, -50.0, -60.0, -60.0]))
 

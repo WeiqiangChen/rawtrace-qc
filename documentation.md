@@ -108,7 +108,7 @@ if result.msn_path is not None:
 
 The extractor overwrites existing artifacts with the same destination path. It currently emits `scan_id`, `retention_time_sec`, `ms_level`, and the available native `total_ion_current` and `base_peak_intensity` columns. Each artifact records the input folder name, including its `.d` suffix, as the required `source_filename` metadata field. The test SQLite fixture retains additional frame fields such as `AccumulationTime` for future extraction work, but `injection_time_ms` is not emitted yet.
 
-Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the required `acquisition_start_time` metadata field, normalized to an ISO-8601 UTC timestamp and shared by the MS1 and MSn artifacts. It records `GlobalMetadata.AnalysisId` as the optional `source_id` metadata field when present.
+Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the recommended `acquisition_start_time` metadata field, normalized to an ISO-8601 UTC timestamp and shared by the MS1 and MSn artifacts. It records `GlobalMetadata.AnalysisId` as the recommended `source_id` metadata field when present.
 
 ## Scan-Trace Import and Validation
 
@@ -117,6 +117,8 @@ Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the required `
 Validation is strict by default and rejects columns that are not implemented by this package. Use `load_trace(path, strict=False)` when consuming artifacts that contain contract-defined future columns or additional producer columns. Known future columns are still type-checked in non-strict mode; unknown columns are ignored.
 
 The artifact contract requires `scan_id`, `retention_time_sec`, and `ms_level`. Optional columns may be omitted when unavailable, while null values in present optional columns represent row-level extraction failure. Required columns cannot contain null values. A `faims_cv` column must contain either only null values or a finite numeric value for every row.
+
+The required Parquet metadata fields are `schema_version`, `vendor`, `ms_level_file`, `precision_mode`, `row_granularity`, and `source_filename`. The recommended fields `source_id`, `generator`, `extracted_at`, `acquisition_start_time`, and `acquisition_path` may be absent from a file. `load_trace()` exposes every recommended field in `TraceArtifact.metadata`, using `None` when a field is absent; processing preserves those missing values in `ProcessedTableMetadata`.
 
 ## Scan-Trace Processing
 
