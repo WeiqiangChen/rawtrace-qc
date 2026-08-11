@@ -108,7 +108,7 @@ if result.msn_path is not None:
 
 The extractor overwrites existing artifacts with the same destination path. It currently emits `scan_id`, `retention_time_sec`, `ms_level`, and the available native `total_ion_current` and `base_peak_intensity` columns. Each artifact records the input folder name, including its `.d` suffix, as the required `source_filename` metadata field. The test SQLite fixture retains additional frame fields such as `AccumulationTime` for future extraction work, but `injection_time_ms` is not emitted yet.
 
-Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the required `acquisition_start_time` metadata field, normalized to an ISO-8601 UTC timestamp and shared by the MS1 and MSn artifacts.
+Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the required `acquisition_start_time` metadata field, normalized to an ISO-8601 UTC timestamp and shared by the MS1 and MSn artifacts. It records `GlobalMetadata.AnalysisId` as the optional `source_id` metadata field when present.
 
 ## Scan-Trace Import and Validation
 

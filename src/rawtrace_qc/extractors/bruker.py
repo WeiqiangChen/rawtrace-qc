@@ -91,6 +91,7 @@ class BrukerExtractor:
             raise FileNotFoundError(f"analysis.tdf not found in {resolved_input}")
 
         acquisition_start_time = self._read_acquisition_start_time(tdf_path)
+        source_id = self._read_analysis_id(tdf_path)
         frames = self._read_frames(tdf_path)
         summary = self._build_summary(
             frames,
@@ -127,6 +128,7 @@ class BrukerExtractor:
                 resolved_input.name,
                 extracted_at,
                 acquisition_start_time,
+                source_id,
             )
         if select_msn and len(msn_indices):
             msn_path = self._write_level(
@@ -139,6 +141,7 @@ class BrukerExtractor:
                 resolved_input.name,
                 extracted_at,
                 acquisition_start_time,
+                source_id,
             )
 
         return ExtractionResult(ms1_path=ms1_path, msn_path=msn_path)
@@ -250,6 +253,18 @@ class BrukerExtractor:
         return acquisition_time.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     @staticmethod
+    def _read_analysis_id(tdf_path: Path) -> str | None:
+        with sqlite3.connect(tdf_path) as connection:
+            row = connection.execute(
+                "SELECT Value FROM GlobalMetadata WHERE Key = ?",
+                ("AnalysisId",),
+            ).fetchone()
+
+        if row is None or not str(row[0]).strip():
+            return None
+        return str(row[0]).strip()
+
+    @staticmethod
     def _read_dia_ms2_ids(tdf_path: Path) -> set[int]:
         with sqlite3.connect(tdf_path) as connection:
             tables = {
@@ -300,6 +315,7 @@ class BrukerExtractor:
         source_filename: str,
         extracted_at: str,
         acquisition_start_time: str,
+        source_id: str | None,
     ) -> Path:
         trace_type = pa.float32() if precision_mode == "low" else pa.float64()
         values: dict[str, pa.Array] = {
@@ -337,6 +353,7 @@ class BrukerExtractor:
             extracted_at=extracted_at,
             acquisition_start_time=acquisition_start_time,
             generator=f"rawtrace-qc-bruker/{_package_version()}",
+            source_id=source_id,
         )
 
 

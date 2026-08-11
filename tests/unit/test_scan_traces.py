@@ -51,6 +51,7 @@ class TestScanTraceWriting:
             extracted_at="2026-08-04T12:00:00Z",
             acquisition_start_time="2026-08-04T10:00:00Z",
             generator="test/1.0",
+            source_id="78d629b2-0edc-4f60-b942-979a46b94ac8",
         )
 
         artifact = load_trace(path)
@@ -58,6 +59,7 @@ class TestScanTraceWriting:
         assert artifact.table.equals(_table())
         assert artifact.metadata["vendor"] == "bruker"
         assert artifact.metadata["source_filename"] == "sample.d"
+        assert artifact.metadata["source_id"] == "78d629b2-0edc-4f60-b942-979a46b94ac8"
         assert pq.ParquetFile(path).metadata.row_group(0).column(0).compression == "SNAPPY"
 
 

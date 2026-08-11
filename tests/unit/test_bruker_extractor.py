@@ -27,6 +27,8 @@ class TestBrukerExtractor:
         assert msn.metadata["row_granularity"] == "frame-aggregate"
         assert ms1.metadata["source_filename"] == "sample.d"
         assert msn.metadata["source_filename"] == "sample.d"
+        assert ms1.metadata["source_id"] == "78d629b2-0edc-4f60-b942-979a46b94ac8"
+        assert msn.metadata["source_id"] == "78d629b2-0edc-4f60-b942-979a46b94ac8"
         assert ms1.metadata["acquisition_start_time"] == "2026-08-01T12:30:15Z"
         assert msn.metadata["acquisition_start_time"] == "2026-08-01T12:30:15Z"
         assert msn.table["scan_id"].to_pylist() == [2, 3]

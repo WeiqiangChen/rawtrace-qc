@@ -78,6 +78,7 @@ def write_trace(
     extracted_at: str,
     acquisition_start_time: str,
     generator: str,
+    source_id: str | None = None,
 ) -> Path:
     """Write a validated table as a schema-v1 Snappy Parquet artifact.
 
@@ -92,6 +93,7 @@ def write_trace(
         extracted_at: ISO-8601 UTC extraction timestamp.
         acquisition_start_time: ISO-8601 UTC source acquisition start timestamp.
         generator: Name and version of the producing extractor.
+        source_id: Optional unique source-run identifier.
 
     Returns:
         The resolved destination path.
@@ -111,6 +113,8 @@ def write_trace(
         "extracted_at": extracted_at,
         "acquisition_start_time": acquisition_start_time,
     }
+    if source_id is not None:
+        metadata["source_id"] = source_id
     validate_trace(table, metadata, strict=True)
 
     resolved_path = output_path.expanduser().resolve()
