@@ -18,7 +18,7 @@ The package is library-first. Applications such as a command-line tool or GUI sh
     - [ ] FAIMS "combined" mode
     - [ ] Optimize dtype and precision for compact HTML serialization
     - [ ] Process filters requested channels by using `ProcessingOptions`
-- [ ] HTML report generation
+- [x] Multi-tab HTML report generation
 - [ ] Command-line interface (typer or **cyclopts**)
 - [ ] Graphical user interface (pyside6)
 
@@ -151,6 +151,44 @@ for item in processed:
 ```
 
 The current processor expects valid schema-v1 artifacts; `validate_trace()` owns source-contract checks before partitioning begins. Precision reduction for compact HTML serialization is reserved for a later implementation because its exact representation depends on the report serializer.
+
+## HTML Reporting
+
+`rawtrace_qc.report` accepts only `ProcessedTable` instances and report configuration. It does not load Parquet files, inspect raw acquisitions, or repeat MS-level and FAIMS partitioning. `build_report()` creates a renderer-neutral `ReportDocument`, while `render_html()` returns a complete HTML string and `write_html()` writes it to disk.
+
+The generated report is one HTML file with a dynamically populated tab bar. Each selected available channel gets a plot tab, followed by a metadata tab containing one row per `ProcessedTable`. The default channel registry labels `total_ion_current` as TIC and `base_peak_intensity` as BPC. Future channels can use a `ChannelSpec` supplied through `ReportOptions`. By default, all channels advertised by `ProcessedTableMetadata.channels` are selected; explicit `ReportOptions(channels=...)` restricts the report and fails clearly when a requested channel is unavailable.
+
+The plot tabs share MS-level, FAIMS CV, and overlay/stacked view controls. Trace colors are stable per source ID or raw-file name, MS levels use line styles, and the retention-time order supplied by processing is preserved. The metadata tab displays selected fields from `ProcessedTableMetadata`; `acquisition_path` is available but intentionally not included in the default field list. Use `ReportOptions(metadata_fields=...)` to choose a different set.
+
+Reports embed Plotly JavaScript by default so the output can be opened without network access. Use `ReportOptions(asset_mode="cdn")` for a smaller report that loads the matching Plotly version from the public CDN.
+
+### Report Example
+
+```python
+from pathlib import Path
+
+from rawtrace_qc.processing import process_traces
+from rawtrace_qc.report import ReportOptions, write_html
+from rawtrace_qc.traces import load_trace
+
+processed = process_traces(
+	[
+		load_trace(Path("/data/traces/sample.ms1-trace.parquet")),
+		load_trace(Path("/data/traces/sample.msn-trace.parquet")),
+	]
+)
+
+write_html(
+	processed,
+	Path("/data/reports/sample-qc.html"),
+	options=ReportOptions(
+		channels=("total_ion_current", "base_peak_intensity"),
+		metadata_fields=("label", "vendor", "ms_level", "faims_cv", "row_granularity"),
+	),
+)
+```
+
+The report package is deliberately separated into report models, channel definitions, data preparation, and the Plotly HTML renderer. A later report type can reuse `ProcessedTable` and the preparation contract while providing a different renderer or HTML shell.
 
 ## Developer Guide
 

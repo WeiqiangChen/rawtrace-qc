@@ -21,3 +21,7 @@ class ArtifactValidationError(RawtraceError):
 
 class ProcessingError(RawtraceError):
     """Raise when trace artifacts cannot be prepared for reporting."""
+
+
+class ReportError(RawtraceError):
+    """Raise when report data or HTML cannot be created."""
