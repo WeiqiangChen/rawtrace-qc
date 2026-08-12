@@ -167,6 +167,17 @@ class TestHtmlReport:
         assert "sample.d" in html
         assert "report-faims" in html
         assert "y_axis_title" in html
+        assert "--facility-blue: #063853" in html
+        assert "--facility-teal: #40B7B5" in html
+        assert "--facility-red: #E73C40" in html
+        assert ".report-tab:focus-visible" in html
+        palette_start = html.index("var palette = [")
+        palette_end = html.index("];", palette_start)
+        palette = html[palette_start:palette_end]
+        assert "#063853', '#40B7B5', '#2F6F9F'" in palette
+        assert "#E73C40" not in palette
+        assert "width: 1.25" in html
+        assert "background: var(--facility-blue);" in html
         assert "https://cdn.plot.ly/plotly-" in html
         assert "retention_time_min" in html
 

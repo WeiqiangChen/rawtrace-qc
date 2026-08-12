@@ -293,94 +293,153 @@ def _css() -> str:
     return """<style>
     :root {
       color-scheme: light;
-      --ink: #17212b;
-      --muted: #617080;
-      --line: #d5dde5;
+      --facility-blue: #063853;
+      --facility-teal: #40B7B5;
+      --facility-red: #E73C40;
+      --ink: #163342;
+      --muted: #5f747e;
+      --line: #d3e1e5;
       --surface: #ffffff;
-      --canvas: #f3f6f8;
-      --accent: #0b7285;
-      --accent-soft: #d8f0f2;
+      --surface-raised: #f8fbfb;
+      --canvas: #edf4f5;
+      --accent: #0e6f76;
+      --accent-soft: #e4f5f4;
+      --focus: rgba(64, 183, 181, .42);
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       min-width: 320px;
       background: var(--canvas);
       color: var(--ink);
-      font-family: Georgia, "Times New Roman", serif;
+      font-family: "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+      line-height: 1.45;
     }
     .report-shell { min-height: 100vh; }
     .report-header {
-      padding: 28px clamp(18px, 4vw, 56px) 20px;
-      background: linear-gradient(120deg, #e6f4f1, #f7f8f5 58%, #eaf0f5);
-      border-bottom: 1px solid var(--line);
+      padding: 32px clamp(18px, 4vw, 56px) 25px;
+      background: linear-gradient(120deg, var(--facility-blue), #0a506b 68%, #146d79);
+      color: var(--surface);
+      border-top: 4px solid var(--facility-teal);
+      border-bottom: 2px solid var(--facility-red);
+      box-shadow: 0 3px 10px rgba(6, 56, 83, .12);
     }
     .report-header h1 {
       margin: 0;
-      font-size: clamp(24px, 4vw, 38px);
-      font-weight: 600;
+      font-family: "Aptos Display", "Aptos", "Segoe UI", sans-serif;
+      font-size: 32px;
+      line-height: 1.1;
+      font-weight: 700;
+      letter-spacing: 0;
     }
     .report-header p {
-      margin: 8px 0 0;
-      color: var(--muted);
-      font-family: system-ui, sans-serif;
+      margin: 10px 0 0;
+      color: #d8ebee;
       font-size: 13px;
+      font-weight: 500;
     }
     .report-tabs {
       display: flex;
-      gap: 4px;
-      padding: 12px clamp(18px, 4vw, 56px) 0;
+      gap: 2px;
+      padding: 0 clamp(18px, 4vw, 56px);
       background: var(--surface);
       border-bottom: 1px solid var(--line);
       overflow-x: auto;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 8px rgba(6, 56, 83, .08);
     }
     .report-tab {
+      min-height: 48px;
       border: 0;
       border-bottom: 3px solid transparent;
-      padding: 11px 16px 10px;
+      padding: 13px 16px 11px;
       background: transparent;
       color: var(--muted);
       cursor: pointer;
-      font: 600 13px system-ui, sans-serif;
+      font: 600 13px "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
       white-space: nowrap;
+      transition: color .15s ease, background-color .15s ease, border-color .15s ease;
     }
-    .report-tab:hover, .report-tab.is-active { color: var(--accent); }
-    .report-tab.is-active { border-bottom-color: var(--accent); }
-    .report-panel { padding: 22px clamp(18px, 4vw, 56px) 42px; }
+    .report-tab:hover {
+      background: var(--accent-soft);
+      color: var(--facility-blue);
+    }
+    .report-tab.is-active {
+      border-bottom-color: var(--facility-teal);
+      color: var(--facility-blue);
+      background: linear-gradient(to bottom, var(--surface), #f4fbfb);
+    }
+    .report-tab:focus-visible,
+    .report-toolbar select:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+    .report-panel {
+      max-width: 1680px;
+      margin: 0 auto;
+      padding: 24px clamp(18px, 4vw, 56px) 48px;
+    }
     .report-toolbar {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px 18px;
+      gap: 10px 20px;
       align-items: center;
-      margin-bottom: 14px;
-      font: 12px system-ui, sans-serif;
-      color: var(--muted);
-    }
-    .report-toolbar label { display: inline-flex; align-items: center; gap: 7px; }
-    .report-toolbar select {
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      padding: 6px 8px;
+      margin-bottom: 16px;
+      padding: 11px 13px;
       background: var(--surface);
-      color: var(--ink);
-      font: inherit;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--facility-teal);
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(6, 56, 83, .06);
+      color: var(--facility-blue);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .report-toolbar label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .report-toolbar select {
+      min-height: 34px;
+      border: 1px solid #b9ccd2;
+      border-radius: 4px;
+      padding: 6px 30px 6px 10px;
+      background: var(--surface);
+      color: var(--facility-blue);
+      cursor: pointer;
+      font: 600 13px "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+    }
+    .report-toolbar select:hover {
+      border-color: var(--accent);
+      background: var(--surface-raised);
     }
     #report-plot {
       width: 100%;
       min-height: 560px;
       background: var(--surface);
       border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: 0 3px 12px rgba(6, 56, 83, .08);
+      overflow: hidden;
     }
+    #report-plot .modebar { top: 8px !important; right: 8px !important; }
     .metadata-table-wrap {
       overflow-x: auto;
       background: var(--surface);
       border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: 0 3px 12px rgba(6, 56, 83, .07);
     }
     .metadata-table {
       width: 100%;
       min-width: 720px;
       border-collapse: collapse;
-      font: 13px system-ui, sans-serif;
+      font: 13px "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+      font-variant-numeric: tabular-nums;
     }
     .metadata-table th, .metadata-table td {
       padding: 10px 12px;
@@ -389,22 +448,37 @@ def _css() -> str:
       vertical-align: top;
     }
     .metadata-table th {
-      background: #edf3f5;
-      color: #40515f;
+      background: var(--facility-blue);
+      border-bottom: 3px solid var(--facility-teal);
+      color: #ffffff;
       font-size: 11px;
-      letter-spacing: .04em;
+      font-weight: 700;
       text-transform: uppercase;
     }
+    .metadata-table tbody tr:nth-child(even) td { background: var(--surface-raised); }
+    .metadata-table tbody tr:hover td { background: #eef9f8; }
     .metadata-table tr:last-child td { border-bottom: 0; }
     .empty-state {
+      margin: 0;
       padding: 42px 18px;
+      background: var(--surface);
+      border: 1px dashed #b9ccd2;
+      border-radius: 6px;
       color: var(--muted);
-      font: 14px system-ui, sans-serif;
+      font-size: 14px;
       text-align: center;
     }
     @media (max-width: 640px) {
-      .report-panel { padding-top: 16px; }
+      .report-header { padding: 24px 16px 20px; }
+      .report-header h1 { font-size: 26px; }
+      .report-tabs { padding: 0 12px; }
+      .report-tab { padding-inline: 13px; }
+      .report-panel { padding: 16px 12px 30px; }
+      .report-toolbar { align-items: stretch; padding: 12px; }
+      .report-toolbar label { flex: 1 1 160px; justify-content: space-between; }
+      .report-toolbar select { flex: 1; }
       #report-plot { min-height: 420px; }
+      .metadata-table { min-width: 640px; }
     }
     </style>"""
 
@@ -417,8 +491,9 @@ def _javascript(active_panel: str) -> str:
       );
       var plot = document.getElementById('report-plot');
       var palette = [
-        '#0b7285', '#d94841', '#5f3dc4', '#2b8a3e',
-        '#e67700', '#1864ab', '#862e9c', '#495057'
+        '#063853', '#40B7B5', '#2F6F9F', '#26734D',
+        '#856F00', '#624A91', '#765B45', '#596B78',
+        '#5F7F2F', '#936A2F'
       ];
       var NORMAL_PLOT_HEIGHT = 560;
       var STACKED_TRACE_HEIGHT = 280;
@@ -449,22 +524,59 @@ def _javascript(active_panel: str) -> str:
         var channelSpec = data.channels[state.channel] || {{}};
         return {{
           template: 'plotly_white',
+          paper_bgcolor: '#ffffff',
+          plot_bgcolor: '#fbfdfd',
           autosize: true,
-          title: {{text: data.title, x: 0.02, xanchor: 'left', font: {{size: 16}}}},
-          margin: {{l: 70, r: 24, t: 56, b: 64}},
+          font: {{
+            family: '"Aptos", "Segoe UI", "Helvetica Neue", sans-serif',
+            color: '#163342',
+            size: 12
+          }},
+          title: {{
+            text: data.title,
+            x: 0.02,
+            xanchor: 'left',
+            font: {{
+              family: '"Aptos Display", "Aptos", "Segoe UI", sans-serif',
+              color: '#063853',
+              size: 16
+            }}
+          }},
+          margin: {{l: 78, r: 24, t: 58, b: 82}},
           hovermode: 'x unified',
+          hoverlabel: {{
+            bgcolor: '#063853',
+            bordercolor: '#40B7B5',
+            font: {{color: '#ffffff'}}
+          }},
           xaxis: {{
             title: 'Retention time (min)',
             showgrid: true,
-            gridcolor: '#e1e7eb'
+            gridcolor: '#dce8eb',
+            zerolinecolor: '#b9ccd2',
+            linecolor: '#b9ccd2',
+            ticks: 'outside'
           }},
           yaxis: {{
             title: channelSpec.y_axis_title || 'Intensity',
             showgrid: true,
-            gridcolor: '#e1e7eb',
-            exponentformat: 'E'
+            gridcolor: '#dce8eb',
+            zerolinecolor: '#b9ccd2',
+            linecolor: '#b9ccd2',
+            exponentformat: 'E',
+            ticks: 'outside'
           }},
-          legend: {{orientation: 'h', y: -0.2, yanchor: 'top'}},
+          legend: {{
+            orientation: 'h',
+            x: 0,
+            y: -0.22,
+            xanchor: 'left',
+            yanchor: 'top',
+            bgcolor: 'rgba(255, 255, 255, .9)',
+            bordercolor: '#d3e1e5',
+            borderwidth: 1,
+            font: {{size: 11, color: '#163342'}}
+          }},
         }};
       }}
       function makeTrace(trace, index, xAxis, yAxis) {{
@@ -477,7 +589,7 @@ def _javascript(active_panel: str) -> str:
           legendgroup: trace.source_key,
           line: {{
             color: palette[trace.color_index % palette.length],
-            width: 1.5
+            width: 1.25
           }},
           hovertemplate: 'RT: %{{x:.2f}} min<br>Intensity: %{{y:.3e}}<extra>'
             + trace.name + '</extra>'
@@ -510,13 +622,19 @@ def _javascript(active_panel: str) -> str:
               title: index === active.length - 1 ? 'Retention time (min)' : '',
               matches: index ? 'x' : undefined,
               showgrid: true,
-              gridcolor: '#e1e7eb'
+              gridcolor: '#dce8eb',
+              zerolinecolor: '#b9ccd2',
+              linecolor: '#b9ccd2',
+              ticks: 'outside'
             }};
             layout['yaxis' + suffix] = {{
               title: trace.name,
               showgrid: true,
-              gridcolor: '#e1e7eb',
-              exponentformat: 'E'
+              gridcolor: '#dce8eb',
+              zerolinecolor: '#b9ccd2',
+              linecolor: '#b9ccd2',
+              exponentformat: 'E',
+              ticks: 'outside'
             }};
             return makeTrace(trace, index, 'x' + suffix, 'y' + suffix);
           }});
