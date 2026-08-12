@@ -92,6 +92,7 @@ class TestBuildReport:
         assert report.available_ms_levels == (1,)
         assert report.available_faims_values == (-50.0,)
         assert report.traces[0].retention_time_min == (0.5, 1.0, 1.5)
+        assert report.traces[0].name == "sample.d | CV -50 V"
         assert report.traces[0].channels[0][1] == (10.0, 20.0, 15.0)
         assert report.metadata_rows[0].values[0] == ("label", "sample.d")
 
@@ -157,6 +158,11 @@ class TestHtmlReport:
 
         assert 'data-channel="total_ion_current"' in html
         assert 'data-channel="base_peak_intensity"' in html
+        assert "All MS levels" not in html
+        assert '"available_ms_levels":[1]' in html
+        assert "dashForLevel" not in html
+        assert "STACKED_TRACE_HEIGHT" in html
+        assert "layout.height = stackedHeight" in html
         assert "Metadata" in html
         assert "sample.d" in html
         assert "report-faims" in html

@@ -273,7 +273,7 @@ def _available_faims_values(
 
 def _trace_name(processed_table: ProcessedTable, table_index: int) -> str:
     metadata = processed_table.metadata
-    name = f"{metadata.label} | MS{metadata.ms_level}"
+    name = metadata.label
     if metadata.faims_cv is not None:
         name += f" | CV {_format_faims_value(metadata.faims_cv)}"
     if not metadata.label:

@@ -146,7 +146,7 @@ def _tab_button(
 def _render_plot_panel(report: ReportDocument) -> str:
     if not report.channels:
         return ""
-    ms_options = '<option value="all">All MS levels</option>' + "".join(
+    ms_options = "".join(
         f'<option value="{level}">MS{level}</option>'
         for level in report.available_ms_levels
     )
@@ -220,6 +220,7 @@ def _report_payload(report: ReportDocument) -> dict[str, object]:
         "title": report.title,
         "initial_channel": report.initial_channel,
         "initial_view": report.initial_view.value,
+        "available_ms_levels": list(report.available_ms_levels),
         "channels": {
             channel.key: {
                 "label": channel.label,
@@ -419,26 +420,23 @@ def _javascript(active_panel: str) -> str:
         '#0b7285', '#d94841', '#5f3dc4', '#2b8a3e',
         '#e67700', '#1864ab', '#862e9c', '#495057'
       ];
+      var NORMAL_PLOT_HEIGHT = 560;
+      var STACKED_TRACE_HEIGHT = 280;
       var state = {{
         channel: data.initial_channel,
-        msLevel: 'all',
+        msLevel: data.available_ms_levels.length
+          ? data.available_ms_levels[0]
+          : null,
         cv: 'all',
         view: data.initial_view
       }};
 
-      function dashForLevel(level) {{
-        return {{1: 'solid', 2: 'dash', 3: 'dot', 4: 'dashdot'}}[level]
-          || 'longdashdot';
-      }}
       function sameCv(left, right) {{
         if (typeof left === 'number') return Number(right) === left;
         return String(left) === String(right);
       }}
       function isVisible(trace) {{
-        if (
-          state.msLevel !== 'all'
-          && trace.ms_level !== Number(state.msLevel)
-        ) return false;
+        if (state.msLevel !== null && trace.ms_level !== state.msLevel) return false;
         if (trace.faims_cv === null || trace.faims_cv === undefined) return true;
         return state.cv === 'all' || sameCv(trace.faims_cv, state.cv);
       }}
@@ -479,8 +477,7 @@ def _javascript(active_panel: str) -> str:
           legendgroup: trace.source_key,
           line: {{
             color: palette[trace.color_index % palette.length],
-            width: 1.5,
-            dash: dashForLevel(trace.ms_level)
+            width: 1.5
           }},
           hovertemplate: 'RT: %{{x:.2f}} min<br>Intensity: %{{y:.3e}}<extra>'
             + trace.name + '</extra>'
@@ -495,6 +492,10 @@ def _javascript(active_panel: str) -> str:
         var layout = baseLayout();
         var traces;
         if (state.view === 'stacked' && active.length) {{
+          var stackedHeight = active.length * STACKED_TRACE_HEIGHT;
+          plot.style.height = stackedHeight + 'px';
+          plot.style.minHeight = stackedHeight + 'px';
+          layout.height = stackedHeight;
           layout.grid = {{
             rows: active.length,
             columns: 1,
@@ -523,6 +524,9 @@ def _javascript(active_panel: str) -> str:
           traces = active.map(function (trace, index) {{
             return makeTrace(trace, index, null, null);
           }});
+          plot.style.height = NORMAL_PLOT_HEIGHT + 'px';
+          plot.style.minHeight = NORMAL_PLOT_HEIGHT + 'px';
+          layout.height = NORMAL_PLOT_HEIGHT;
         }}
         Plotly.react(
           plot,
@@ -549,10 +553,13 @@ def _javascript(active_panel: str) -> str:
         button.addEventListener('click', function () {{ activateTab(button); }});
       }});
       var ms = document.getElementById('report-ms-level');
-      if (ms) ms.addEventListener('change', function () {{
-        state.msLevel = ms.value;
-        render();
-      }});
+      if (ms) {{
+        ms.value = String(state.msLevel);
+        ms.addEventListener('change', function () {{
+          state.msLevel = Number(ms.value);
+          render();
+        }});
+      }}
       var cv = document.getElementById('report-faims');
       if (cv) cv.addEventListener('change', function () {{
         state.cv = cv.value;
