@@ -61,6 +61,11 @@ class TestReportOptions:
         assert options.asset_mode is ReportAssetMode.EMBEDDED
         assert options.initial_view is ReportViewMode.OVERLAY
 
+    def test_pairwise_view_is_supported(self) -> None:
+        options = ReportOptions(initial_view=ReportViewMode.PAIRWISE)
+
+        assert options.initial_view is ReportViewMode.PAIRWISE
+
     @pytest.mark.parametrize(
         "kwargs",
         [
@@ -163,12 +168,24 @@ class TestHtmlReport:
         assert "dashForLevel" not in html
         assert "STACKED_TRACE_HEIGHT" in html
         assert "layout.height = stackedHeight" in html
+        assert "rows: traces.length" in html
+        assert "index === traces.length - 1" in html
         assert "Metadata" in html
         assert "sample.d" in html
         assert "report-faims" in html
+        assert '<option value="pairwise">Pairwise</option>' in html
         assert 'id="report-reference"' in html
         assert '<option value="">None</option>' in html
+        assert 'id="report-selected-traces-toggle"' in html
+        assert 'id="report-select-all"' in html
+        assert 'id="report-select-none"' in html
+        assert 'id="report-comparison-trace"' in html
+        assert 'id="report-previous-trace"' in html
+        assert 'id="report-next-trace"' in html
         assert '"table_index":0' in html
+        assert "selectedTraceIndices" in html
+        assert "comparisonCandidates" in html
+        assert "state.view === 'pairwise'" in html
         assert "updateReferenceOptions" in html
         assert "function orderedTraces(active)" in html
         assert "state.view !== 'overlay' || state.referenceTrace === null" in html
@@ -176,6 +193,8 @@ class TestHtmlReport:
         assert ").concat([referenceTrace])" in html
         assert "trace.table_index === state.referenceTrace" in html
         assert "REFERENCE_COLOR" in html
+        assert "event.key === 'ArrowUp' || event.key === 'ArrowLeft'" in html
+        assert "event.key === 'ArrowDown' || event.key === 'ArrowRight'" in html
         assert "y_axis_title" in html
         assert "--facility-blue: #063853" in html
         assert "--facility-teal: #40B7B5" in html

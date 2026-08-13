@@ -21,6 +21,7 @@ class ReportViewMode(StrEnum):
 
     OVERLAY = "overlay"
     STACKED = "stacked"
+    PAIRWISE = "pairwise"
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +85,7 @@ class ReportOptions:
         except (TypeError, ValueError) as error:
             raise ConfigurationError(
                 f"Report initial_view {self.initial_view!r} is invalid; "
-                "choose 'overlay' or 'stacked'."
+                "choose 'overlay', 'stacked', or 'pairwise'."
             ) from error
         try:
             asset_mode = ReportAssetMode(self.asset_mode)

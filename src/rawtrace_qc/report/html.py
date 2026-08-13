@@ -157,10 +157,60 @@ def _render_plot_panel(report: ReportDocument) -> str:
         <label>View <select id="report-view">
           <option value="overlay">Overlay</option>
           <option value="stacked">Stacked</option>
+          <option value="pairwise">Pairwise</option>
         </select></label>
         <label>Reference trace <select id="report-reference">
           <option value="">None</option>
         </select></label>
+        <div id="report-selected-traces-control" class="report-picker">
+          <button
+            id="report-selected-traces-toggle"
+            class="report-picker-toggle"
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            aria-controls="report-selected-traces-menu"
+          >Selected traces <span id="report-selected-traces-count">All</span></button>
+          <div
+            id="report-selected-traces-menu"
+            class="report-picker-menu"
+            role="dialog"
+            aria-label="Select traces to display"
+            hidden
+          >
+            <div class="report-picker-actions">
+              <button id="report-select-all" type="button">Select all</button>
+              <button id="report-select-none" type="button">Select none</button>
+            </div>
+            <div
+              id="report-selected-traces-options"
+              class="report-picker-options"
+              role="group"
+              aria-label="Available traces"
+            ></div>
+          </div>
+        </div>
+        <div id="report-pairwise-control" class="report-pairwise-control" hidden>
+          <label>Comparison trace <select id="report-comparison-trace">
+            <option value="">Select a reference first</option>
+          </select></label>
+          <div class="report-pairwise-buttons">
+            <button
+              id="report-previous-trace"
+              class="report-pairwise-button"
+              type="button"
+              title="Previous trace"
+              aria-label="Previous trace"
+            >&larr;</button>
+            <button
+              id="report-next-trace"
+              class="report-pairwise-button"
+              type="button"
+              title="Next trace"
+              aria-label="Next trace"
+            >&rarr;</button>
+          </div>
+        </div>
       </div>
       <div id="report-plot" role="img" aria-label="Chromatogram plot"></div>
 """
@@ -377,7 +427,8 @@ def _css() -> str:
       background: linear-gradient(to bottom, var(--surface), #f4fbfb);
     }
     .report-tab:focus-visible,
-    .report-toolbar select:focus-visible {
+    .report-toolbar select:focus-visible,
+    .report-toolbar button:focus-visible {
       outline: 3px solid var(--focus);
       outline-offset: 2px;
     }
@@ -420,6 +471,108 @@ def _css() -> str:
     .report-toolbar select:hover {
       border-color: var(--accent);
       background: var(--surface-raised);
+    }
+    .report-toolbar select:disabled,
+    .report-toolbar button:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+    .report-toolbar button {
+      min-height: 34px;
+      border: 1px solid #b9ccd2;
+      border-radius: 4px;
+      padding: 6px 10px;
+      background: var(--surface);
+      color: var(--facility-blue);
+      cursor: pointer;
+      font: 600 13px "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+    }
+    .report-toolbar button:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: var(--surface-raised);
+    }
+    .report-picker {
+      position: relative;
+    }
+    .report-picker-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .report-picker-toggle span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .report-picker-menu {
+      position: absolute;
+      top: calc(100% + 7px);
+      left: 0;
+      z-index: 20;
+      width: min(320px, calc(100vw - 36px));
+      padding: 10px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(6, 56, 83, .16);
+    }
+    .report-picker-actions {
+      display: flex;
+      gap: 8px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--line);
+    }
+    .report-picker-actions button {
+      min-height: 30px;
+      padding: 5px 8px;
+      font-size: 12px;
+    }
+    .report-picker-options {
+      max-height: 280px;
+      overflow-y: auto;
+      padding-top: 6px;
+    }
+    .report-picker-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 7px 6px;
+      border-radius: 4px;
+      color: var(--ink);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .report-picker-option:hover { background: var(--accent-soft); }
+    .report-picker-option input {
+      flex: 0 0 auto;
+      margin: 2px 0 0;
+      accent-color: var(--facility-teal);
+    }
+    .report-picker-empty {
+      padding: 8px 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .report-pairwise-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .report-pairwise-control > label {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .report-pairwise-buttons {
+      display: inline-flex;
+      gap: 6px;
+    }
+    .report-pairwise-button {
+      width: 34px;
+      padding: 4px 6px;
+      font-size: 19px !important;
+      line-height: 1;
     }
     #report-plot {
       width: 100%;
@@ -481,6 +634,10 @@ def _css() -> str:
       .report-toolbar { align-items: stretch; padding: 12px; }
       .report-toolbar label { flex: 1 1 160px; justify-content: space-between; }
       .report-toolbar select { flex: 1; }
+      .report-picker { flex: 1 1 160px; }
+      .report-picker-toggle { width: 100%; justify-content: space-between; }
+      .report-pairwise-control { flex: 1 1 260px; }
+      .report-pairwise-control > label { flex: 1; justify-content: space-between; }
       #report-plot { min-height: 420px; }
       .metadata-table { min-width: 640px; }
     }
@@ -509,9 +666,30 @@ def _javascript(active_panel: str) -> str:
           : null,
         cv: 'all',
         view: data.initial_view,
-        referenceTrace: null
+        referenceTrace: null,
+        selectedTraceIndices: null,
+        comparisonTrace: null
       }};
       var reference = document.getElementById('report-reference');
+      var selectedControl = document.getElementById(
+        'report-selected-traces-control'
+      );
+      var selectedToggle = document.getElementById(
+        'report-selected-traces-toggle'
+      );
+      var selectedMenu = document.getElementById('report-selected-traces-menu');
+      var selectedOptions = document.getElementById(
+        'report-selected-traces-options'
+      );
+      var selectedCountLabel = document.getElementById(
+        'report-selected-traces-count'
+      );
+      var selectAll = document.getElementById('report-select-all');
+      var selectNone = document.getElementById('report-select-none');
+      var pairwiseControl = document.getElementById('report-pairwise-control');
+      var comparison = document.getElementById('report-comparison-trace');
+      var previousTrace = document.getElementById('report-previous-trace');
+      var nextTrace = document.getElementById('report-next-trace');
 
       function sameCv(left, right) {{
         if (typeof left === 'number') return Number(right) === left;
@@ -527,6 +705,23 @@ def _javascript(active_panel: str) -> str:
           return trace.channels[state.channel] !== undefined;
         }});
       }}
+      function selectableTraces(active) {{
+        return active.filter(function (trace) {{
+          return trace.table_index !== state.referenceTrace;
+        }});
+      }}
+      function isSelectedTrace(trace) {{
+        return trace.table_index === state.referenceTrace
+          || state.selectedTraceIndices === null
+          || state.selectedTraceIndices.has(trace.table_index);
+      }}
+      function selectedDisplayTraces(active) {{
+        return active.filter(isSelectedTrace);
+      }}
+      function comparisonCandidates(active) {{
+        if (state.referenceTrace === null) return [];
+        return selectableTraces(active);
+      }}
       function orderedTraces(active) {{
         if (state.view !== 'overlay' || state.referenceTrace === null) return active;
         var referenceTrace = active.find(function (trace) {{
@@ -536,6 +731,65 @@ def _javascript(active_panel: str) -> str:
         return active.filter(function (trace) {{
           return trace.table_index !== state.referenceTrace;
         }}).concat([referenceTrace]);
+      }}
+      function closeSelectedMenu() {{
+        if (!selectedMenu || !selectedToggle) return;
+        selectedMenu.hidden = true;
+        selectedToggle.setAttribute('aria-expanded', 'false');
+      }}
+      function updateViewControls() {{
+        var isPairwise = state.view === 'pairwise';
+        if (selectedControl) selectedControl.hidden = isPairwise;
+        if (pairwiseControl) pairwiseControl.hidden = !isPairwise;
+        if (isPairwise) closeSelectedMenu();
+      }}
+      function updateSelectedTraceOptions(active) {{
+        if (!selectedOptions) return;
+        var candidates = selectableTraces(active);
+        while (selectedOptions.firstChild) selectedOptions.removeChild(
+          selectedOptions.firstChild
+        );
+        candidates.forEach(function (trace) {{
+          var option = document.createElement('label');
+          option.className = 'report-picker-option';
+          var checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = String(trace.table_index);
+          checkbox.checked = isSelectedTrace(trace);
+          checkbox.setAttribute('aria-label', trace.name);
+          checkbox.addEventListener('change', function () {{
+            if (state.selectedTraceIndices === null) {{
+              state.selectedTraceIndices = new Set(
+                candidates.map(function (item) {{ return item.table_index; }})
+              );
+            }}
+            if (checkbox.checked) {{
+              state.selectedTraceIndices.add(trace.table_index);
+            }} else {{
+              state.selectedTraceIndices.delete(trace.table_index);
+            }}
+            render();
+          }});
+          option.appendChild(checkbox);
+          option.appendChild(document.createTextNode(trace.name));
+          selectedOptions.appendChild(option);
+        }});
+        if (!candidates.length) {{
+          var empty = document.createElement('div');
+          empty.className = 'report-picker-empty';
+          empty.textContent = 'No other traces are available.';
+          selectedOptions.appendChild(empty);
+        }}
+        var selectedCount = candidates.filter(isSelectedTrace).length;
+        if (selectedCountLabel) {{
+          selectedCountLabel.textContent = candidates.length === 0
+            ? 'None'
+            : selectedCount === candidates.length
+              ? 'All'
+              : String(selectedCount);
+        }}
+        if (selectAll) selectAll.disabled = candidates.length === 0;
+        if (selectNone) selectNone.disabled = candidates.length === 0;
       }}
       function updateReferenceOptions(active) {{
         if (!reference) return;
@@ -559,6 +813,76 @@ def _javascript(active_panel: str) -> str:
           reference.appendChild(option);
         }});
         reference.value = selected === null ? '' : String(selected);
+      }}
+      function updatePairwiseOptions(active) {{
+        if (!comparison) return;
+        var candidates = comparisonCandidates(active);
+        var selected = state.comparisonTrace;
+        var selectedIsAvailable = candidates.some(function (trace) {{
+          return trace.table_index === selected;
+        }});
+        if (!selectedIsAvailable) {{
+          state.comparisonTrace = candidates.length
+            ? candidates[0].table_index
+            : null;
+        }}
+        while (comparison.firstChild) comparison.removeChild(comparison.firstChild);
+        if (state.referenceTrace === null) {{
+          var referencePrompt = document.createElement('option');
+          referencePrompt.value = '';
+          referencePrompt.textContent = 'Select a reference first';
+          comparison.appendChild(referencePrompt);
+        }} else if (!candidates.length) {{
+          var noCandidates = document.createElement('option');
+          noCandidates.value = '';
+          noCandidates.textContent = 'No comparison traces available';
+          comparison.appendChild(noCandidates);
+        }} else {{
+          candidates.forEach(function (trace) {{
+            var option = document.createElement('option');
+            option.value = String(trace.table_index);
+            option.textContent = trace.name;
+            comparison.appendChild(option);
+          }});
+        }}
+        comparison.disabled = state.referenceTrace === null || !candidates.length;
+        comparison.value = state.comparisonTrace === null
+          ? ''
+          : String(state.comparisonTrace);
+        var navigationDisabled = candidates.length < 2 || comparison.disabled;
+        if (previousTrace) previousTrace.disabled = navigationDisabled;
+        if (nextTrace) nextTrace.disabled = navigationDisabled;
+      }}
+      function pairwiseDisplayTraces(active) {{
+        if (state.referenceTrace === null || state.comparisonTrace === null) {{
+          return [];
+        }}
+        var referenceTrace = active.find(function (trace) {{
+          return trace.table_index === state.referenceTrace;
+        }});
+        var comparisonTrace = active.find(function (trace) {{
+          return trace.table_index === state.comparisonTrace;
+        }});
+        if (!referenceTrace || !comparisonTrace) return [];
+        return [comparisonTrace, referenceTrace];
+      }}
+      function cycleComparison(direction) {{
+        if (state.view !== 'pairwise' || state.referenceTrace === null) return;
+        var candidates = comparisonCandidates(activeTraces());
+        if (!candidates.length) return;
+        var currentIndex = candidates.findIndex(function (trace) {{
+          return trace.table_index === state.comparisonTrace;
+        }});
+        var nextIndex;
+        if (currentIndex === -1) {{
+          nextIndex = direction > 0 ? 0 : candidates.length - 1;
+        }} else {{
+          nextIndex = (currentIndex + direction + candidates.length)
+            % candidates.length;
+        }}
+        state.comparisonTrace = candidates[nextIndex].table_index;
+        render();
+        if (comparison && !comparison.disabled) comparison.focus();
       }}
       function baseLayout() {{
         var channelSpec = data.channels[state.channel] || {{}};
@@ -619,6 +943,18 @@ def _javascript(active_panel: str) -> str:
           }},
         }};
       }}
+      function addEmptyMessage(layout, message) {{
+        layout.annotations = [{{
+          text: message,
+          x: 0.5,
+          y: 0.5,
+          xref: 'paper',
+          yref: 'paper',
+          showarrow: false,
+          font: {{size: 14, color: '#5f747e'}},
+          align: 'center'
+        }}];
+      }}
       function makeTrace(trace, index, xAxis, yAxis) {{
         var item = {{
           x: trace.retention_time_min,
@@ -643,27 +979,42 @@ def _javascript(active_panel: str) -> str:
       function render() {{
         if (!plot || !window.Plotly || !state.channel) return;
         var active = activeTraces();
+        updateViewControls();
         updateReferenceOptions(active);
-        active = orderedTraces(active);
         var layout = baseLayout();
         var traces;
-        if (state.view === 'stacked' && active.length) {{
-          var stackedHeight = active.length * STACKED_TRACE_HEIGHT;
+        if (state.view === 'pairwise') {{
+          updatePairwiseOptions(active);
+          traces = pairwiseDisplayTraces(active);
+        }} else {{
+          updateSelectedTraceOptions(active);
+          traces = orderedTraces(selectedDisplayTraces(active));
+        }}
+        if (!traces.length) {{
+          var emptyMessage = state.view === 'pairwise'
+            ? state.referenceTrace === null
+              ? 'Select a reference trace to start a pairwise comparison.'
+              : 'No comparison traces are available.'
+            : 'Select at least one trace to display.';
+          addEmptyMessage(layout, emptyMessage);
+        }}
+        if (state.view === 'stacked' && traces.length) {{
+          var stackedHeight = traces.length * STACKED_TRACE_HEIGHT;
           plot.style.height = stackedHeight + 'px';
           plot.style.minHeight = stackedHeight + 'px';
           layout.height = stackedHeight;
           layout.grid = {{
-            rows: active.length,
+            rows: traces.length,
             columns: 1,
             pattern: 'independent',
             roworder: 'top to bottom'
           }};
           delete layout.xaxis;
           delete layout.yaxis;
-          traces = active.map(function (trace, index) {{
+          traces = traces.map(function (trace, index) {{
             var suffix = index === 0 ? '' : String(index + 1);
             layout['xaxis' + suffix] = {{
-              title: index === active.length - 1 ? 'Retention time (min)' : '',
+              title: index === traces.length - 1 ? 'Retention time (min)' : '',
               matches: index ? 'x' : undefined,
               showgrid: true,
               gridcolor: '#dce8eb',
@@ -683,7 +1034,7 @@ def _javascript(active_panel: str) -> str:
             return makeTrace(trace, index, 'x' + suffix, 'y' + suffix);
           }});
         }} else {{
-          traces = active.map(function (trace, index) {{
+          traces = traces.map(function (trace, index) {{
             return makeTrace(trace, index, null, null);
           }});
           plot.style.height = NORMAL_PLOT_HEIGHT + 'px';
@@ -740,6 +1091,56 @@ def _javascript(active_panel: str) -> str:
           ? null
           : Number(reference.value);
         render();
+      }});
+      if (selectedToggle) selectedToggle.addEventListener('click', function () {{
+        var isOpen = selectedMenu && !selectedMenu.hidden;
+        if (isOpen) {{
+          closeSelectedMenu();
+        }} else if (selectedMenu) {{
+          selectedMenu.hidden = false;
+          selectedToggle.setAttribute('aria-expanded', 'true');
+        }}
+      }});
+      if (selectAll) selectAll.addEventListener('click', function () {{
+        state.selectedTraceIndices = null;
+        render();
+      }});
+      if (selectNone) selectNone.addEventListener('click', function () {{
+        state.selectedTraceIndices = new Set();
+        render();
+      }});
+      document.addEventListener('click', function (event) {{
+        if (selectedControl && !selectedControl.contains(event.target)) {{
+          closeSelectedMenu();
+        }}
+      }});
+      document.addEventListener('keydown', function (event) {{
+        if (event.key === 'Escape' && selectedMenu && !selectedMenu.hidden) {{
+          closeSelectedMenu();
+          if (selectedToggle) selectedToggle.focus();
+        }}
+      }});
+      if (comparison) {{
+        comparison.addEventListener('change', function () {{
+          state.comparisonTrace = comparison.value === ''
+            ? null
+            : Number(comparison.value);
+          render();
+        }});
+        comparison.addEventListener('keydown', function (event) {{
+          var direction = 0;
+          if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') direction = -1;
+          if (event.key === 'ArrowDown' || event.key === 'ArrowRight') direction = 1;
+          if (direction === 0 || comparison.disabled) return;
+          event.preventDefault();
+          cycleComparison(direction);
+        }});
+      }}
+      if (previousTrace) previousTrace.addEventListener('click', function () {{
+        cycleComparison(-1);
+      }});
+      if (nextTrace) nextTrace.addEventListener('click', function () {{
+        cycleComparison(1);
       }});
       document.getElementById('{active_panel}').hidden = false;
       document.querySelectorAll('.report-panel').forEach(function (panel) {{
