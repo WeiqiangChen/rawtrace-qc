@@ -158,6 +158,9 @@ def _render_plot_panel(report: ReportDocument) -> str:
           <option value="overlay">Overlay</option>
           <option value="stacked">Stacked</option>
         </select></label>
+        <label>Reference trace <select id="report-reference">
+          <option value="">None</option>
+        </select></label>
       </div>
       <div id="report-plot" role="img" aria-label="Chromatogram plot"></div>
 """
@@ -231,6 +234,7 @@ def _report_payload(report: ReportDocument) -> dict[str, object]:
         "available_faims_values": list(report.available_faims_values),
         "traces": [
             {
+                "table_index": trace.table_index,
                 "name": trace.name,
                 "source_key": trace.source_key,
                 "ms_level": trace.ms_level,
@@ -495,6 +499,7 @@ def _javascript(active_panel: str) -> str:
         '#856F00', '#624A91', '#765B45', '#596B78',
         '#5F7F2F', '#936A2F'
       ];
+      var REFERENCE_COLOR = '#E73C40';
       var NORMAL_PLOT_HEIGHT = 560;
       var STACKED_TRACE_HEIGHT = 280;
       var state = {{
@@ -503,8 +508,10 @@ def _javascript(active_panel: str) -> str:
           ? data.available_ms_levels[0]
           : null,
         cv: 'all',
-        view: data.initial_view
+        view: data.initial_view,
+        referenceTrace: null
       }};
+      var reference = document.getElementById('report-reference');
 
       function sameCv(left, right) {{
         if (typeof left === 'number') return Number(right) === left;
@@ -519,6 +526,39 @@ def _javascript(active_panel: str) -> str:
         return data.traces.filter(isVisible).filter(function (trace) {{
           return trace.channels[state.channel] !== undefined;
         }});
+      }}
+      function orderedTraces(active) {{
+        if (state.view !== 'overlay' || state.referenceTrace === null) return active;
+        var referenceTrace = active.find(function (trace) {{
+          return trace.table_index === state.referenceTrace;
+        }});
+        if (!referenceTrace) return active;
+        return active.filter(function (trace) {{
+          return trace.table_index !== state.referenceTrace;
+        }}).concat([referenceTrace]);
+      }}
+      function updateReferenceOptions(active) {{
+        if (!reference) return;
+        var selected = state.referenceTrace;
+        var selectedIsVisible = active.some(function (trace) {{
+          return trace.table_index === selected;
+        }});
+        if (!selectedIsVisible) {{
+          state.referenceTrace = null;
+          selected = null;
+        }}
+        while (reference.firstChild) reference.removeChild(reference.firstChild);
+        var none = document.createElement('option');
+        none.value = '';
+        none.textContent = 'None';
+        reference.appendChild(none);
+        active.forEach(function (trace) {{
+          var option = document.createElement('option');
+          option.value = String(trace.table_index);
+          option.textContent = trace.name;
+          reference.appendChild(option);
+        }});
+        reference.value = selected === null ? '' : String(selected);
       }}
       function baseLayout() {{
         var channelSpec = data.channels[state.channel] || {{}};
@@ -588,7 +628,9 @@ def _javascript(active_panel: str) -> str:
           name: trace.name,
           legendgroup: trace.source_key,
           line: {{
-            color: palette[trace.color_index % palette.length],
+            color: trace.table_index === state.referenceTrace
+              ? REFERENCE_COLOR
+              : palette[trace.color_index % palette.length],
             width: 1.25
           }},
           hovertemplate: 'RT: %{{x:.2f}} min<br>Intensity: %{{y:.3e}}<extra>'
@@ -601,6 +643,8 @@ def _javascript(active_panel: str) -> str:
       function render() {{
         if (!plot || !window.Plotly || !state.channel) return;
         var active = activeTraces();
+        updateReferenceOptions(active);
+        active = orderedTraces(active);
         var layout = baseLayout();
         var traces;
         if (state.view === 'stacked' && active.length) {{
@@ -691,6 +735,12 @@ def _javascript(active_panel: str) -> str:
           render();
         }});
       }}
+      if (reference) reference.addEventListener('change', function () {{
+        state.referenceTrace = reference.value === ''
+          ? null
+          : Number(reference.value);
+        render();
+      }});
       document.getElementById('{active_panel}').hidden = false;
       document.querySelectorAll('.report-panel').forEach(function (panel) {{
         if (panel.id !== '{active_panel}') panel.hidden = true;

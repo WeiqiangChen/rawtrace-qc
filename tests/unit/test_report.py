@@ -166,6 +166,16 @@ class TestHtmlReport:
         assert "Metadata" in html
         assert "sample.d" in html
         assert "report-faims" in html
+        assert 'id="report-reference"' in html
+        assert '<option value="">None</option>' in html
+        assert '"table_index":0' in html
+        assert "updateReferenceOptions" in html
+        assert "function orderedTraces(active)" in html
+        assert "state.view !== 'overlay' || state.referenceTrace === null" in html
+        assert "return active.filter" in html
+        assert ").concat([referenceTrace])" in html
+        assert "trace.table_index === state.referenceTrace" in html
+        assert "REFERENCE_COLOR" in html
         assert "y_axis_title" in html
         assert "--facility-blue: #063853" in html
         assert "--facility-teal: #40B7B5" in html
