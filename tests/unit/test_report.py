@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pyarrow as pa
 import pytest
+from plotly import __version__ as plotly_python_version
+from plotly.offline import get_plotlyjs_version
 from rawtrace_qc.errors import ConfigurationError, ReportError
 from rawtrace_qc.processing import ProcessedTable, ProcessedTableMetadata
 from rawtrace_qc.report import (
@@ -230,7 +232,8 @@ class TestHtmlReport:
         assert "traces.concat(legendTraces)" in html
         assert "width: 1.25" in html
         assert "background: var(--facility-blue);" in html
-        assert "https://cdn.plot.ly/plotly-" in html
+        assert f"https://cdn.plot.ly/plotly-{get_plotlyjs_version()}.min.js" in html
+        assert f"https://cdn.plot.ly/plotly-{plotly_python_version}.min.js" not in html
         assert "retention_time_min" in html
 
     def test_render_html_preserves_all_metadata_rows(self) -> None:

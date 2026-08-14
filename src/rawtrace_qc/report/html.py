@@ -7,8 +7,7 @@ from collections.abc import Sequence
 from html import escape
 from pathlib import Path
 
-from plotly import __version__ as plotly_version
-from plotly.offline import get_plotlyjs
+from plotly.offline import get_plotlyjs, get_plotlyjs_version
 
 from rawtrace_qc.processing.models import ProcessedTable
 from rawtrace_qc.report.models import ReportDocument, ReportOptions
@@ -272,7 +271,7 @@ def _plotly_asset(report: ReportDocument) -> str:
         return ""
     if report.asset_mode.value == "cdn":
         return (
-            f'<script src="https://cdn.plot.ly/plotly-{plotly_version}.min.js">'
+            f'<script src="https://cdn.plot.ly/plotly-{get_plotlyjs_version()}.min.js">'
             "</script>"
         )
     return f"<script>{get_plotlyjs()}</script>"
