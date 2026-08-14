@@ -46,18 +46,18 @@ class ChannelSpec:
 DEFAULT_METADATA_FIELDS = (
     "label",
     "rawfile_name",
+    "acquisition_start_time",
     "vendor",
     "ms_level",
     "faims_cv",
-    "row_granularity",
+    "channels",
     "time_unit",
     "precision",
-    "channels",
+    "row_granularity",
     "source_id",
-    "schema_version",
-    "generator",
     "extracted_at",
-    "acquisition_start_time",
+    "generator",
+    "schema_version",
 )
 
 
