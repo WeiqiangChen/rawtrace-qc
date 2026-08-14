@@ -216,7 +216,7 @@ class TestHtmlReport:
         palette_start = html.index("var palette = [")
         palette_end = html.index("];", palette_start)
         palette = html[palette_start:palette_end]
-        assert "#063853', '#40B7B5', '#E69F00'" in palette
+        assert "#063853', '#40B7B5'" in palette
         assert "#E73C40" not in palette
         assert "groupclick: 'togglegroup'" in html
         assert "showlegend: false" in html

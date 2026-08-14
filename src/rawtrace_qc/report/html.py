@@ -704,7 +704,7 @@ def _javascript(active_panel: str) -> str:
       var plot = document.getElementById('report-plot');
       var palette = [
         '#063853', '#40B7B5', '#E69F00', '#56B4E9',
-        '#009E73', '#F0E442', '#CC79A7', '#7A5195',
+        '#009E73', '#7F1D1D', '#CC79A7', '#885ba6',
         '#8C6D31', '#6C757D'
       ];
       var REFERENCE_COLOR = '#E73C40';
