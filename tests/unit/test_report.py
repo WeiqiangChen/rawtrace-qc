@@ -189,6 +189,9 @@ class TestHtmlReport:
         assert '"metadata_rows":[{"table_index":0' in html
         assert "function cycleMetadataSort(field)" in html
         assert "state.sorts.push" in html
+        assert "field: 'acquisition_start_time', direction: 1" in html
+        assert "field: 'rawfile_name', direction: 1" in html
+        assert "typeof left === 'string' && !left.trim()" in html
         assert "return sortedTraces().filter(isVisible)" in html
         assert "updateMetadataRows();" in html
         assert "selectedTraceIndices" in html

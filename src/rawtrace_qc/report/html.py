@@ -721,7 +721,10 @@ def _javascript(active_panel: str) -> str:
         referenceTrace: null,
         selectedTraceIndices: null,
         comparisonTrace: null,
-        sorts: []
+        sorts: [
+          {{field: 'acquisition_start_time', direction: 1}},
+          {{field: 'rawfile_name', direction: 1}}
+        ]
       }};
       var reference = document.getElementById('report-reference');
       var selectedControl = document.getElementById(
@@ -749,8 +752,10 @@ def _javascript(active_panel: str) -> str:
         return String(left) === String(right);
       }}
       function compareMetadataValues(left, right) {{
-        var leftMissing = left === null || left === undefined;
-        var rightMissing = right === null || right === undefined;
+        var leftMissing = left === null || left === undefined
+          || typeof left === 'string' && !left.trim();
+        var rightMissing = right === null || right === undefined
+          || typeof right === 'string' && !right.trim();
         if (leftMissing || rightMissing) {{
           if (leftMissing && rightMissing) return 0;
           return leftMissing ? 1 : -1;
