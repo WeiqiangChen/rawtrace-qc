@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import stat
 from collections import deque
+from collections.abc import Iterator
 from pathlib import Path
 
 from rawtrace_qc.discovery.models import (
@@ -56,22 +57,15 @@ def discover(
     source = Path(source)
     _validate_source(source)
     tree = _traverse(source, selected.scope)
-    active_registry = registry or _default_registry()
-    now = selected.clock()
 
     candidates: list[DiscoveryCandidate] = []
     seen: set[str] = set()
-    for vendor, format, validator in active_registry:
-        if selected.vendors is not None and vendor not in selected.vendors:
+    for candidate in _validated_candidates(tree, selected, registry):
+        key = _path_key(candidate.path)
+        if key in seen:
             continue
-        for path in validator(
-            tree, selected.min_size_bytes, selected.min_age_seconds, now
-        ):
-            key = _path_key(path)
-            if key in seen:
-                continue
-            seen.add(key)
-            candidates.append(DiscoveryCandidate(path, vendor, format))
+        seen.add(key)
+        candidates.append(candidate)
 
     candidates.sort(
         key=lambda candidate: (
@@ -106,33 +100,54 @@ def validate_path(
         supported complete acquisition.
     """
     selected = options or DiscoveryOptions()
-    resolved_path = Path(path).expanduser().resolve()
+    normalized_path = Path(path).expanduser().absolute()
     try:
-        metadata = os.lstat(resolved_path)
+        metadata = os.lstat(normalized_path)
     except OSError:
         return None
     if stat.S_ISLNK(metadata.st_mode):
         return None
 
     if stat.S_ISREG(metadata.st_mode):
-        tree = TraversalTree(files=(resolved_path,))
+        tree = TraversalTree(files=(normalized_path,))
     elif stat.S_ISDIR(metadata.st_mode):
-        tree = TraversalTree(directories=(resolved_path,))
+        tree = TraversalTree(directories=(normalized_path,))
     else:
         return None
 
-    active_registry = registry or _default_registry()
-    now = selected.clock()
-    path_key = _path_key(resolved_path)
-    for vendor, format, validator in active_registry:
-        if selected.vendors is not None and vendor not in selected.vendors:
-            continue
-        valid_paths = validator(
-            tree, selected.min_size_bytes, selected.min_age_seconds, now
-        )
-        if any(_path_key(candidate) == path_key for candidate in valid_paths):
-            return DiscoveryCandidate(resolved_path, vendor, format)
+    path_key = _path_key(normalized_path)
+    for candidate in _validated_candidates(tree, selected, registry):
+        if _path_key(candidate.path) == path_key:
+            return DiscoveryCandidate(
+                normalized_path, candidate.vendor, candidate.format
+            )
     return None
+
+
+def _validated_candidates(
+    tree: TraversalTree,
+    options: DiscoveryOptions,
+    registry: DiscoveryRegistry | None,
+) -> Iterator[DiscoveryCandidate]:
+    """Yield candidates returned by the selected validators.
+
+    Args:
+        tree: Files and directories supplied to each validator.
+        options: Vendor filter and validation thresholds.
+        registry: Validator registry, or `None` for the built-in registry.
+
+    Yields:
+        Candidates accepted by the selected validators.
+    """
+    active_registry = registry or _default_registry()
+    now = options.clock()
+    for vendor, format, validator in active_registry:
+        if options.vendors is not None and vendor not in options.vendors:
+            continue
+        for path in validator(
+            tree, options.min_size_bytes, options.min_age_seconds, now
+        ):
+            yield DiscoveryCandidate(path, vendor, format)
 
 
 def _default_registry() -> DiscoveryRegistry:

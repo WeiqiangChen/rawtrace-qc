@@ -20,6 +20,7 @@ from rawtrace_qc.discovery import (
     Vendor,
     discover,
     validate_bruker,
+    validate_path,
     validate_thermo,
 )
 from rawtrace_qc.errors import ConfigurationError, DiscoveryError
@@ -240,3 +241,22 @@ class TestDiscover:
             pytest.skip(f"symlinks are unavailable: {error}")
 
         assert discover(tmp_path, _options()).candidates == ()
+
+
+class TestValidatePath:
+    def test_validates_complete_files_and_directories(self, tmp_path: Path) -> None:
+        sample = _write_file(tmp_path / "sample.raw", 1)
+        bruker = _write_bruker(tmp_path / "run.d")
+
+        assert validate_path(sample, _options()) == DiscoveryCandidate(sample, Vendor.THERMO, FileFormat.RAW)
+        assert validate_path(bruker, _options()) == DiscoveryCandidate(bruker, Vendor.BRUKER, FileFormat.D)
+
+    def test_rejects_symlinked_paths(self, tmp_path: Path) -> None:
+        target = _write_file(tmp_path / "target.raw", 1)
+        link = tmp_path / "link.raw"
+        try:
+            link.symlink_to(target)
+        except (OSError, NotImplementedError) as error:
+            pytest.skip(f"symlinks are unavailable: {error}")
+
+        assert validate_path(link, _options()) is None
