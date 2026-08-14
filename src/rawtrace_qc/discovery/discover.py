@@ -83,6 +83,58 @@ def discover(
     return DiscoveryResult(tuple(candidates), tree.issues)
 
 
+def validate_path(
+    path: Path,
+    options: DiscoveryOptions | None = None,
+    registry: DiscoveryRegistry | None = None,
+) -> DiscoveryCandidate | None:
+    """Validate one possible acquisition path.
+
+    This is the single-path counterpart to `discover()` for workflows such as
+    drag and drop or file-dialog selection. Symlinks, unsupported path types,
+    and paths rejected by every registered validator return `None`.
+
+    Args:
+        path: File or directory to validate.
+        options: Discovery configuration. If None (default), uses the default
+            thresholds and the system clock.
+        registry: Validator registry. If None (default), uses Bruker and
+            Thermo validators.
+
+    Returns:
+        A valid acquisition candidate, or `None` when the path is not a
+        supported complete acquisition.
+    """
+    selected = options or DiscoveryOptions()
+    resolved_path = Path(path).expanduser().resolve()
+    try:
+        metadata = os.lstat(resolved_path)
+    except OSError:
+        return None
+    if stat.S_ISLNK(metadata.st_mode):
+        return None
+
+    if stat.S_ISREG(metadata.st_mode):
+        tree = TraversalTree(files=(resolved_path,))
+    elif stat.S_ISDIR(metadata.st_mode):
+        tree = TraversalTree(directories=(resolved_path,))
+    else:
+        return None
+
+    active_registry = registry or _default_registry()
+    now = selected.clock()
+    path_key = _path_key(resolved_path)
+    for vendor, format, validator in active_registry:
+        if selected.vendors is not None and vendor not in selected.vendors:
+            continue
+        valid_paths = validator(
+            tree, selected.min_size_bytes, selected.min_age_seconds, now
+        )
+        if any(_path_key(candidate) == path_key for candidate in valid_paths):
+            return DiscoveryCandidate(resolved_path, vendor, format)
+    return None
+
+
 def _default_registry() -> DiscoveryRegistry:
     registry = DiscoveryRegistry()
     registry.register(Vendor.THERMO, FileFormat.RAW, validate_thermo)
