@@ -1,0 +1,911 @@
+"""PySide6 desktop interface for discovery and one-button report generation."""
+
+from __future__ import annotations
+
+import sys
+import webbrowser
+from dataclasses import replace
+from importlib import import_module
+from pathlib import Path
+from typing import Any
+
+from rawtrace_qc.discovery import DiscoveryScope
+from rawtrace_qc.errors import ConfigurationError, DiscoveryError
+from rawtrace_qc.gui.cache import TraceCache
+from rawtrace_qc.gui.config import GuiSettings, load_settings, save_settings
+from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode
+from rawtrace_qc.gui.reporting import (
+    ReportGenerationOptions,
+    ReportGenerationResult,
+    ReportStorageMode,
+    ReportWorkspace,
+    generate_report,
+)
+from rawtrace_qc.gui.workflow import RawFileSelection
+
+
+def main() -> int:
+    """Create the Qt application, show its main window, and run its event loop."""
+    qt_core, qt_gui, qt_widgets = _load_qt()
+    application = qt_widgets.QApplication.instance()
+    if application is None:
+        application = qt_widgets.QApplication(sys.argv)
+    application.setApplicationName("rawtrace-qc")
+    application.setOrganizationName("rawtrace-qc")
+    window = create_window(qt_core, qt_gui, qt_widgets)
+    window.show()
+    return application.exec()
+
+
+def create_window(
+    qt_core: Any,
+    qt_gui: Any,
+    qt_widgets: Any,
+    settings_path: Path | None = None,
+) -> Any:
+    """Build and return the main window using already-loaded Qt modules."""
+    try:
+        settings = load_settings(settings_path)
+        configuration_message = ""
+    except ConfigurationError as error:
+        settings = GuiSettings()
+        configuration_message = f"Configuration reset to defaults: {error}"
+
+    class DropList(qt_widgets.QListWidget):
+        """Accept local files and folders dropped from the operating system."""
+
+        paths_dropped = qt_core.Signal(object)
+
+        def dragEnterEvent(self, event: Any) -> None:
+            if event.mimeData().hasUrls():
+                event.acceptProposedAction()
+                return
+            super().dragEnterEvent(event)
+
+        def dropEvent(self, event: Any) -> None:
+            paths = tuple(
+                Path(url.toLocalFile())
+                for url in event.mimeData().urls()
+                if url.isLocalFile()
+            )
+            if paths:
+                self.paths_dropped.emit(paths)
+                event.acceptProposedAction()
+                return
+            super().dropEvent(event)
+
+    class WorkerSignals(qt_core.QObject):
+        """Carry background report results back to the GUI thread."""
+
+        finished = qt_core.Signal(object)
+        failed = qt_core.Signal(str)
+
+    class ReportWorker(qt_core.QRunnable):
+        """Run report generation without blocking the Qt event loop."""
+
+        def __init__(self, candidates: tuple[Any, ...], options: Any) -> None:
+            super().__init__()
+            self.candidates = candidates
+            self.options = options
+            self.signals = WorkerSignals()
+
+        def run(self) -> None:
+            try:
+                result = generate_report(
+                    self.candidates,
+                    cache,
+                    options=self.options,
+                    workspace=workspace,
+                    thermo_settings=current_settings.thermo,
+                )
+            except Exception as error:
+                self.signals.failed.emit(str(error))
+            else:
+                self.signals.finished.emit(result)
+
+    class MainWindow(qt_widgets.QMainWindow):
+        """Present discovery, selected inputs, and report controls."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.setWindowTitle("rawtrace-qc | run review")
+            self.resize(1180, 820)
+            self.setMinimumSize(900, 620)
+            self._settings = settings
+            self._saved_patterns = list(settings.patterns)
+            self._custom_patterns: list[FilenamePattern] = []
+            self._active_pattern_keys: set[tuple[str, str]] = set()
+            self._selection = RawFileSelection(settings.discovery_options())
+            self._workspace = workspace
+            self._cache = cache
+            self._worker: Any = None
+            self._rendering_candidates = False
+            self._rendering_selected = False
+            self._configuration_message = configuration_message
+            self._build_ui()
+
+        def _build_ui(self) -> None:
+            self.setStyleSheet(_STYLE)
+            central = qt_widgets.QWidget()
+            self.setCentralWidget(central)
+            root = qt_widgets.QVBoxLayout(central)
+            root.setContentsMargins(28, 24, 28, 24)
+            root.setSpacing(18)
+
+            header = qt_widgets.QFrame()
+            header.setObjectName("header")
+            header_layout = qt_widgets.QVBoxLayout(header)
+            header_layout.setContentsMargins(24, 20, 24, 20)
+            title = qt_widgets.QLabel("rawtrace-qc")
+            title.setObjectName("appTitle")
+            subtitle = qt_widgets.QLabel("Raw-file review  /  report desk")
+            subtitle.setObjectName("appSubtitle")
+            header_layout.addWidget(title)
+            header_layout.addWidget(subtitle)
+            root.addWidget(header)
+
+            source_frame = qt_widgets.QFrame()
+            source_frame.setObjectName("section")
+            source_layout = qt_widgets.QVBoxLayout(source_frame)
+            source_layout.setContentsMargins(18, 16, 18, 16)
+            source_heading = qt_widgets.QHBoxLayout()
+            source_heading.addWidget(qt_widgets.QLabel("Discover raw files"))
+            source_heading.addStretch()
+            self.settings_button = qt_widgets.QPushButton("Settings")
+            self.settings_button.clicked.connect(self._open_settings)
+            source_heading.addWidget(self.settings_button)
+            source_layout.addLayout(source_heading)
+
+            source_row = qt_widgets.QHBoxLayout()
+            self.source_edit = qt_widgets.QLineEdit()
+            self.source_edit.setPlaceholderText("Choose a folder to inspect")
+            self.source_edit.setReadOnly(True)
+            choose_source = qt_widgets.QPushButton("Choose folder")
+            choose_source.clicked.connect(self._choose_source)
+            self.scope_combo = qt_widgets.QComboBox()
+            self.scope_combo.addItem("Direct only", DiscoveryScope.DIRECT.value)
+            self.scope_combo.addItem(
+                "Include subfolders", DiscoveryScope.RECURSIVE.value
+            )
+            self.scope_combo.setCurrentIndex(
+                0 if self._settings.scope is DiscoveryScope.DIRECT else 1
+            )
+            scan_button = qt_widgets.QPushButton("Scan folder")
+            scan_button.setObjectName("primary")
+            scan_button.clicked.connect(self._scan_source)
+            source_row.addWidget(self.source_edit, 1)
+            source_row.addWidget(choose_source)
+            source_row.addWidget(self.scope_combo)
+            source_row.addWidget(scan_button)
+            source_layout.addLayout(source_row)
+            self.discovery_status = qt_widgets.QLabel("No folder scanned yet")
+            self.discovery_status.setObjectName("muted")
+            source_layout.addWidget(self.discovery_status)
+            root.addWidget(source_frame)
+
+            splitter = qt_widgets.QSplitter(qt_core.Qt.Orientation.Vertical)
+            splitter.setChildrenCollapsible(False)
+            root.addWidget(splitter, 1)
+
+            selected_frame = qt_widgets.QFrame()
+            selected_frame.setObjectName("section")
+            selected_layout = qt_widgets.QVBoxLayout(selected_frame)
+            selected_layout.setContentsMargins(18, 16, 18, 16)
+            selected_heading = qt_widgets.QHBoxLayout()
+            selected_heading.addWidget(qt_widgets.QLabel("Selected raw files"))
+            self.selected_count = qt_widgets.QLabel("0 files")
+            self.selected_count.setObjectName("count")
+            selected_heading.addWidget(self.selected_count)
+            selected_heading.addStretch()
+            review_button = qt_widgets.QPushButton("Review candidates")
+            review_button.clicked.connect(self._open_candidates)
+            selected_heading.addWidget(review_button)
+            selected_layout.addLayout(selected_heading)
+            self.selected_list = DropList()
+            self.selected_list.setToolTip("Drop valid .raw files or .d folders here")
+            self.selected_list.paths_dropped.connect(self._add_paths)
+            self.selected_list.itemChanged.connect(self._selected_item_changed)
+            selected_layout.addWidget(self.selected_list, 1)
+            selected_buttons = qt_widgets.QHBoxLayout()
+            add_files = qt_widgets.QPushButton("Add files")
+            add_files.clicked.connect(self._add_files)
+            add_folder = qt_widgets.QPushButton("Add folder")
+            add_folder.clicked.connect(self._add_folder)
+            remove = qt_widgets.QPushButton("Remove selected")
+            remove.clicked.connect(self._remove_selected)
+            select_all = qt_widgets.QPushButton("Select all")
+            select_all.clicked.connect(lambda: self._set_all_selected(True))
+            select_none = qt_widgets.QPushButton("Select none")
+            select_none.clicked.connect(lambda: self._set_all_selected(False))
+            for button in (add_files, add_folder, remove, select_all, select_none):
+                selected_buttons.addWidget(button)
+            selected_buttons.addStretch()
+            selected_layout.addLayout(selected_buttons)
+            splitter.addWidget(selected_frame)
+
+            report_frame = qt_widgets.QFrame()
+            report_frame.setObjectName("reportBar")
+            report_layout = qt_widgets.QHBoxLayout(report_frame)
+            report_layout.setContentsMargins(18, 14, 18, 14)
+            report_layout.addWidget(qt_widgets.QLabel("Report"))
+            self.storage_combo = qt_widgets.QComboBox()
+            self.storage_combo.addItem("Temporary", ReportStorageMode.TEMPORARY.value)
+            self.storage_combo.addItem("Permanent", ReportStorageMode.PERMANENT.value)
+            self.storage_combo.currentIndexChanged.connect(self._storage_changed)
+            report_layout.addWidget(self.storage_combo)
+            self.report_directory_edit = qt_widgets.QLineEdit(
+                str(self._settings.report_directory)
+            )
+            self.report_directory_edit.setPlaceholderText("Permanent report directory")
+            report_layout.addWidget(self.report_directory_edit, 1)
+            browse_report = qt_widgets.QPushButton("Browse")
+            browse_report.clicked.connect(self._choose_report_directory)
+            report_layout.addWidget(browse_report)
+            self.precision_combo = qt_widgets.QComboBox()
+            self.precision_combo.addItem("Low precision", "low")
+            self.precision_combo.addItem("High precision", "high")
+            report_layout.addWidget(self.precision_combo)
+            self.generate_button = qt_widgets.QPushButton("Generate report")
+            self.generate_button.setObjectName("primary")
+            self.generate_button.clicked.connect(self._generate)
+            report_layout.addWidget(self.generate_button)
+            root.addWidget(report_frame)
+            self._storage_changed()
+            if self._configuration_message:
+                self.discovery_status.setText(self._configuration_message)
+
+        def _choose_source(self) -> None:
+            path = qt_widgets.QFileDialog.getExistingDirectory(
+                self,
+                "Choose discovery folder",
+                self.source_edit.text() or str(Path.home()),
+            )
+            if path:
+                self.source_edit.setText(path)
+                self._clear_candidates()
+
+        def _scan_source(self) -> None:
+            nonlocal current_settings
+            source_text = self.source_edit.text().strip()
+            if not source_text:
+                self.discovery_status.setText("Choose a folder before scanning.")
+                return
+            try:
+                scope = DiscoveryScope(self.scope_combo.currentData())
+                self._selection.options = replace(self._selection.options, scope=scope)
+                self._settings = replace(self._settings, scope=scope)
+                current_settings = self._settings
+                result = self._selection.discover_folder(Path(source_text))
+            except (DiscoveryError, OSError, ValueError) as error:
+                self._clear_candidates()
+                self.discovery_status.setText(str(error))
+                return
+            self.discovery_status.setText(
+                f"{len(result.candidates)} valid candidate(s) found"
+                + (
+                    f"  /  {len(result.issues)} traversal issue(s)"
+                    if result.issues
+                    else ""
+                )
+            )
+            self._open_candidates()
+
+        def _clear_candidates(self) -> None:
+            self._selection.set_candidates(())
+            self.discovery_status.setText("Candidate list cleared")
+
+        def _open_candidates(self) -> None:
+            if not self._selection.candidates:
+                self.discovery_status.setText("Scan a folder to review candidates.")
+                return
+            dialog = qt_widgets.QDialog(self)
+            dialog.setWindowTitle("Candidate raw files")
+            dialog.resize(980, 700)
+            layout = qt_widgets.QVBoxLayout(dialog)
+            heading = qt_widgets.QHBoxLayout()
+            heading.addWidget(qt_widgets.QLabel("Candidate raw files"))
+            candidate_count = qt_widgets.QLabel()
+            candidate_count.setObjectName("count")
+            heading.addWidget(candidate_count)
+            heading.addStretch()
+            layout.addLayout(heading)
+
+            pattern_title = qt_widgets.QLabel("Filename patterns")
+            pattern_title.setObjectName("subheading")
+            layout.addWidget(pattern_title)
+            pattern_table = qt_widgets.QTableWidget(0, 4)
+            pattern_table.setHorizontalHeaderLabels(("Use", "Pattern", "Regex", "Mode"))
+            pattern_table.horizontalHeader().setSectionResizeMode(
+                0, qt_widgets.QHeaderView.ResizeMode.ResizeToContents
+            )
+            pattern_table.horizontalHeader().setSectionResizeMode(
+                1, qt_widgets.QHeaderView.ResizeMode.ResizeToContents
+            )
+            pattern_table.horizontalHeader().setSectionResizeMode(
+                2, qt_widgets.QHeaderView.ResizeMode.Stretch
+            )
+            pattern_table.horizontalHeader().setSectionResizeMode(
+                3, qt_widgets.QHeaderView.ResizeMode.ResizeToContents
+            )
+            layout.addWidget(pattern_table)
+
+            custom_row = qt_widgets.QHBoxLayout()
+            custom_name = qt_widgets.QLineEdit()
+            custom_name.setPlaceholderText("Custom pattern name")
+            custom_expression = qt_widgets.QLineEdit()
+            custom_expression.setPlaceholderText("Regular expression")
+            custom_mode = qt_widgets.QComboBox()
+            custom_mode.addItem("Include", PatternMode.INCLUDE.value)
+            custom_mode.addItem("Exclude", PatternMode.EXCLUDE.value)
+            add_pattern = qt_widgets.QPushButton("Add custom pattern")
+            custom_row.addWidget(custom_name)
+            custom_row.addWidget(custom_expression, 1)
+            custom_row.addWidget(custom_mode)
+            custom_row.addWidget(add_pattern)
+            layout.addLayout(custom_row)
+
+            candidate_list = qt_widgets.QListWidget()
+            candidate_list.setSelectionMode(
+                qt_widgets.QAbstractItemView.SelectionMode.ExtendedSelection
+            )
+            layout.addWidget(candidate_list, 1)
+            candidate_buttons = qt_widgets.QHBoxLayout()
+            select_active = qt_widgets.QPushButton("Select active")
+            select_none = qt_widgets.QPushButton("Select none")
+            add_candidates = qt_widgets.QPushButton("Add selected to report")
+            add_candidates.setObjectName("primary")
+            close = qt_widgets.QPushButton("Close")
+            candidate_buttons.addWidget(select_active)
+            candidate_buttons.addWidget(select_none)
+            candidate_buttons.addStretch()
+            candidate_buttons.addWidget(add_candidates)
+            candidate_buttons.addWidget(close)
+            layout.addLayout(candidate_buttons)
+
+            definitions = list(self._saved_patterns) + list(self._custom_patterns)
+            saved_count = len(self._saved_patterns)
+
+            def pattern_key(pattern: FilenamePattern) -> tuple[str, str]:
+                return pattern.name, pattern.expression
+
+            def read_rows(include_disabled: bool) -> tuple[FilenamePattern, ...] | None:
+                patterns: list[FilenamePattern] = []
+                try:
+                    for row in range(pattern_table.rowCount()):
+                        check = pattern_table.cellWidget(row, 0)
+                        mode_box = pattern_table.cellWidget(row, 3)
+                        pattern = definitions[row]
+                        if include_disabled or check.isChecked():
+                            patterns.append(
+                                FilenamePattern(
+                                    pattern.name,
+                                    pattern.expression,
+                                    mode_box.currentData(),
+                                )
+                            )
+                except (ConfigurationError, AttributeError) as error:
+                    self.discovery_status.setText(str(error))
+                    return None
+                return tuple(patterns)
+
+            def render_candidates() -> None:
+                self._rendering_candidates = True
+                candidate_list.clear()
+                included = 0
+                for entry in self._selection.candidates:
+                    item = qt_widgets.QListWidgetItem(entry.candidate.path.name)
+                    item.setToolTip(str(entry.candidate.path))
+                    item.setData(
+                        qt_core.Qt.ItemDataRole.UserRole,
+                        str(entry.candidate.path),
+                    )
+                    flags = (
+                        qt_core.Qt.ItemFlag.ItemIsEnabled
+                        | qt_core.Qt.ItemFlag.ItemIsSelectable
+                        | qt_core.Qt.ItemFlag.ItemIsUserCheckable
+                    )
+                    item.setFlags(flags)
+                    if entry.included:
+                        included += 1
+                        item.setCheckState(
+                            qt_core.Qt.CheckState.Checked
+                            if entry.active
+                            else qt_core.Qt.CheckState.Unchecked
+                        )
+                    else:
+                        item.setCheckState(qt_core.Qt.CheckState.Unchecked)
+                        item.setForeground(qt_gui.QBrush(qt_gui.QColor("#84909a")))
+                        item.setFlags(
+                            qt_core.Qt.ItemFlag.ItemIsSelectable
+                            | qt_core.Qt.ItemFlag.ItemIsEnabled
+                        )
+                    candidate_list.addItem(item)
+                candidate_count.setText(
+                    f"{included} active / {len(self._selection.candidates)} total"
+                )
+                self._rendering_candidates = False
+
+            def refresh_patterns() -> None:
+                active = read_rows(False)
+                if active is None:
+                    return
+                self._active_pattern_keys = {pattern_key(pattern) for pattern in active}
+                self._selection.apply_patterns(active)
+                render_candidates()
+
+            def rebuild_pattern_table() -> None:
+                pattern_table.blockSignals(True)
+                pattern_table.setRowCount(0)
+                for row, pattern in enumerate(definitions):
+                    pattern_table.insertRow(row)
+                    check = qt_widgets.QCheckBox()
+                    check.setChecked(pattern_key(pattern) in self._active_pattern_keys)
+                    check.stateChanged.connect(refresh_patterns)
+                    pattern_table.setCellWidget(row, 0, check)
+                    pattern_table.setItem(
+                        row, 1, qt_widgets.QTableWidgetItem(pattern.name)
+                    )
+                    pattern_table.setItem(
+                        row, 2, qt_widgets.QTableWidgetItem(pattern.expression)
+                    )
+                    mode_box = qt_widgets.QComboBox()
+                    mode_box.addItem("Include", PatternMode.INCLUDE.value)
+                    mode_box.addItem("Exclude", PatternMode.EXCLUDE.value)
+                    mode_box.setCurrentIndex(
+                        0 if pattern.mode is PatternMode.INCLUDE else 1
+                    )
+                    mode_box.currentIndexChanged.connect(refresh_patterns)
+                    pattern_table.setCellWidget(row, 3, mode_box)
+                pattern_table.blockSignals(False)
+
+            def candidate_item_changed(item: Any) -> None:
+                if self._rendering_candidates:
+                    return
+                path = Path(item.data(qt_core.Qt.ItemDataRole.UserRole))
+                self._selection.set_candidate_active(
+                    path,
+                    item.checkState() == qt_core.Qt.CheckState.Checked,
+                )
+                render_candidates()
+
+            def add_custom_pattern() -> None:
+                try:
+                    pattern = FilenamePattern(
+                        custom_name.text(),
+                        custom_expression.text(),
+                        custom_mode.currentData(),
+                    )
+                except ConfigurationError as error:
+                    qt_widgets.QMessageBox.warning(
+                        dialog, "Invalid pattern", str(error)
+                    )
+                    return
+                definitions.append(pattern)
+                self._custom_patterns.append(pattern)
+                self._active_pattern_keys.add(pattern_key(pattern))
+                custom_name.clear()
+                custom_expression.clear()
+                rebuild_pattern_table()
+                refresh_patterns()
+
+            def promote_candidates() -> None:
+                if read_rows(False) is None:
+                    return
+                self._selection.promote_active_candidates()
+                self._refresh_selected()
+                self.discovery_status.setText(
+                    f"{len(self._selection.active_selected())} selected raw file(s) "
+                    "active"
+                )
+                dialog.accept()
+
+            def persist_pattern_definitions() -> None:
+                all_patterns = read_rows(True)
+                if all_patterns is None:
+                    return
+                self._saved_patterns = list(all_patterns[:saved_count])
+                self._custom_patterns = list(all_patterns[saved_count:])
+                self._settings = replace(
+                    self._settings,
+                    patterns=tuple(self._saved_patterns),
+                )
+
+            candidate_list.itemChanged.connect(candidate_item_changed)
+            select_active.clicked.connect(
+                lambda: self._set_candidate_checks(True, render_candidates)
+            )
+            select_none.clicked.connect(
+                lambda: self._set_candidate_checks(False, render_candidates)
+            )
+            add_pattern.clicked.connect(add_custom_pattern)
+            add_candidates.clicked.connect(promote_candidates)
+            close.clicked.connect(dialog.reject)
+            rebuild_pattern_table()
+            refresh_patterns()
+            dialog.finished.connect(lambda _: persist_pattern_definitions())
+            dialog.exec()
+
+        def _set_candidate_checks(self, active: bool, render: Any) -> None:
+            for entry in self._selection.candidates:
+                if entry.included:
+                    self._selection.set_candidate_active(entry.candidate.path, active)
+            render()
+
+        def _refresh_selected(self) -> None:
+            self._rendering_selected = True
+            self.selected_list.clear()
+            for entry in self._selection.selected:
+                item = qt_widgets.QListWidgetItem(entry.candidate.path.name)
+                item.setToolTip(str(entry.candidate.path))
+                item.setData(
+                    qt_core.Qt.ItemDataRole.UserRole,
+                    str(entry.candidate.path),
+                )
+                item.setFlags(
+                    qt_core.Qt.ItemFlag.ItemIsEnabled
+                    | qt_core.Qt.ItemFlag.ItemIsSelectable
+                    | qt_core.Qt.ItemFlag.ItemIsUserCheckable
+                )
+                item.setCheckState(
+                    qt_core.Qt.CheckState.Checked
+                    if entry.active
+                    else qt_core.Qt.CheckState.Unchecked
+                )
+                self.selected_list.addItem(item)
+            active_count = len(self._selection.active_selected())
+            self.selected_count.setText(
+                f"{active_count} active / {len(self._selection.selected)} files"
+            )
+            self._rendering_selected = False
+
+        def _selected_item_changed(self, item: Any) -> None:
+            if self._rendering_selected:
+                return
+            path = Path(item.data(qt_core.Qt.ItemDataRole.UserRole))
+            self._selection.set_selected_active(
+                path,
+                item.checkState() == qt_core.Qt.CheckState.Checked,
+            )
+            self._refresh_selected()
+
+        def _add_paths(self, paths: tuple[Path, ...]) -> None:
+            result = self._selection.add_paths(paths)
+            self._refresh_selected()
+            messages = []
+            if result.accepted:
+                messages.append(f"Added {len(result.accepted)} valid path(s)")
+            if result.rejected:
+                messages.append(f"Rejected {len(result.rejected)} invalid path(s)")
+            self.discovery_status.setText("  /  ".join(messages) or "No paths added")
+
+        def _add_files(self) -> None:
+            paths, _ = qt_widgets.QFileDialog.getOpenFileNames(
+                self,
+                "Add raw files",
+                str(Path.home()),
+                "Thermo raw files (*.raw);;All files (*)",
+            )
+            if paths:
+                self._add_paths(tuple(Path(path) for path in paths))
+
+        def _add_folder(self) -> None:
+            path = qt_widgets.QFileDialog.getExistingDirectory(
+                self,
+                "Add Bruker acquisition folder",
+                str(Path.home()),
+            )
+            if path:
+                self._add_paths((Path(path),))
+
+        def _remove_selected(self) -> None:
+            paths = tuple(
+                Path(item.data(qt_core.Qt.ItemDataRole.UserRole))
+                for item in self.selected_list.selectedItems()
+            )
+            self._selection.remove_selected(paths)
+            self._refresh_selected()
+
+        def _set_all_selected(self, active: bool) -> None:
+            self._selection.set_all_selected_active(active)
+            self._refresh_selected()
+
+        def _storage_changed(self) -> None:
+            permanent = (
+                self.storage_combo.currentData() == ReportStorageMode.PERMANENT.value
+            )
+            self.report_directory_edit.setEnabled(permanent)
+
+        def _choose_report_directory(self) -> None:
+            path = qt_widgets.QFileDialog.getExistingDirectory(
+                self,
+                "Choose permanent report directory",
+                self.report_directory_edit.text() or str(Path.home()),
+            )
+            if path:
+                self.report_directory_edit.setText(path)
+
+        def _generate(self) -> None:
+            candidates = self._selection.active_selected()
+            if not candidates:
+                self.discovery_status.setText(
+                    "Select at least one active raw file first."
+                )
+                return
+            try:
+                storage_mode = ReportStorageMode(self.storage_combo.currentData())
+                output_directory = Path(self.report_directory_edit.text())
+                options = ReportGenerationOptions(
+                    storage_mode=storage_mode,
+                    output_directory=output_directory,
+                    precision_mode=self.precision_combo.currentData(),
+                )
+            except (ConfigurationError, ValueError) as error:
+                self.discovery_status.setText(str(error))
+                return
+            self._worker = ReportWorker(candidates, options)
+            self._worker.signals.finished.connect(self._report_finished)
+            self._worker.signals.failed.connect(self._report_failed)
+            self.generate_button.setEnabled(False)
+            self.discovery_status.setText("Generating report in the background...")
+            qt_core.QThreadPool.globalInstance().start(self._worker)
+
+        def _report_finished(self, result: ReportGenerationResult) -> None:
+            self._worker = None
+            self.generate_button.setEnabled(True)
+            self.discovery_status.setText(
+                f"Report ready: {result.output_path}  /  "
+                f"{result.cache_hits} cache hit(s)"
+            )
+            webbrowser.open(result.output_path.as_uri())
+
+        def _report_failed(self, message: str) -> None:
+            self._worker = None
+            self.generate_button.setEnabled(True)
+            self.discovery_status.setText(f"Report failed: {message}")
+
+        def _open_settings(self) -> None:
+            dialog = qt_widgets.QDialog(self)
+            dialog.setWindowTitle("rawtrace-qc settings")
+            dialog.resize(640, 430)
+            layout = qt_widgets.QVBoxLayout(dialog)
+            form = qt_widgets.QFormLayout()
+            cache_edit = qt_widgets.QLineEdit(str(self._settings.cache_directory))
+            report_edit = qt_widgets.QLineEdit(str(self._settings.report_directory))
+            helper_url = qt_widgets.QLineEdit(self._settings.thermo.download_url or "")
+            helper_hash = qt_widgets.QLineEdit(self._settings.thermo.sha256 or "")
+            helper_path = qt_widgets.QLineEdit(
+                str(self._settings.thermo.executable_path or "")
+            )
+            size_spin = qt_widgets.QSpinBox()
+            size_spin.setRange(0, 2**63 - 1)
+            size_spin.setValue(self._settings.min_size_bytes)
+            age_spin = qt_widgets.QDoubleSpinBox()
+            age_spin.setRange(0, 10**9)
+            age_spin.setValue(self._settings.min_age_seconds)
+            form.addRow("Minimum file size", size_spin)
+            form.addRow("Minimum age (seconds)", age_spin)
+            form.addRow("Trace cache", _path_editor(cache_edit, dialog, False))
+            form.addRow("Permanent reports", _path_editor(report_edit, dialog, False))
+            form.addRow("Thermo helper URL", helper_url)
+            form.addRow("Thermo helper SHA-256", helper_hash)
+            form.addRow(
+                "Thermo helper executable",
+                _path_editor(helper_path, dialog, True),
+            )
+            layout.addLayout(form)
+            note = qt_widgets.QLabel(
+                "The helper URL must point to a trusted standalone executable. "
+                "The checksum is verified when it is supplied."
+            )
+            note.setWordWrap(True)
+            note.setObjectName("muted")
+            layout.addWidget(note)
+            buttons = qt_widgets.QDialogButtonBox(
+                qt_widgets.QDialogButtonBox.StandardButton.Save
+                | qt_widgets.QDialogButtonBox.StandardButton.Cancel
+            )
+            buttons.accepted.connect(
+                lambda: self._save_settings_dialog(
+                    dialog,
+                    cache_edit,
+                    report_edit,
+                    helper_url,
+                    helper_hash,
+                    helper_path,
+                    size_spin,
+                    age_spin,
+                )
+            )
+            buttons.rejected.connect(dialog.reject)
+            layout.addWidget(buttons)
+            dialog.exec()
+
+        def _save_settings_dialog(
+            self,
+            dialog: Any,
+            cache_edit: Any,
+            report_edit: Any,
+            helper_url: Any,
+            helper_hash: Any,
+            helper_path: Any,
+            size_spin: Any,
+            age_spin: Any,
+        ) -> None:
+            nonlocal cache, current_settings
+            try:
+                updated = GuiSettings(
+                    scope=DiscoveryScope(self.scope_combo.currentData()),
+                    min_size_bytes=size_spin.value(),
+                    min_age_seconds=age_spin.value(),
+                    patterns=tuple(self._saved_patterns),
+                    cache_directory=Path(cache_edit.text()),
+                    report_directory=Path(report_edit.text()),
+                    thermo=_thermo_settings(
+                        helper_url.text(),
+                        helper_hash.text(),
+                        helper_path.text(),
+                    ),
+                )
+                save_settings(updated, settings_path)
+            except (ConfigurationError, OSError) as error:
+                qt_widgets.QMessageBox.critical(dialog, "Invalid settings", str(error))
+                return
+            self._settings = updated
+            current_settings = updated
+            self._selection.options = updated.discovery_options()
+            cache = TraceCache(updated.cache_directory)
+            self._cache = cache
+            dialog.accept()
+
+        def closeEvent(self, event: Any) -> None:
+            if self._worker is not None:
+                qt_widgets.QMessageBox.information(
+                    self,
+                    "Report in progress",
+                    "Wait for the current report to finish before closing the "
+                    "application.",
+                )
+                event.ignore()
+                return
+            try:
+                save_settings(self._settings, settings_path)
+            except ConfigurationError as error:
+                qt_widgets.QMessageBox.warning(
+                    self, "Could not save settings", str(error)
+                )
+            self._workspace.cleanup()
+            event.accept()
+
+    workspace = ReportWorkspace()
+    cache = TraceCache(settings.cache_directory)
+    current_settings = settings
+    window = MainWindow()
+    return window
+
+
+def _load_qt() -> tuple[Any, Any, Any]:
+    """Load PySide6 lazily so the core package keeps Qt optional."""
+    try:
+        return (
+            import_module("PySide6.QtCore"),
+            import_module("PySide6.QtGui"),
+            import_module("PySide6.QtWidgets"),
+        )
+    except ModuleNotFoundError as error:
+        raise RuntimeError(
+            "The GUI requires PySide6. Install it with `uv sync --extra gui`."
+        ) from error
+
+
+def _path_editor(line_edit: Any, dialog: Any, file_mode: bool) -> Any:
+    """Add a browse button beside one settings path field."""
+    qt_widgets = import_module("PySide6.QtWidgets")
+    container = qt_widgets.QWidget(dialog)
+    layout = qt_widgets.QHBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    button = qt_widgets.QPushButton("Browse")
+
+    def browse() -> None:
+        if file_mode:
+            path, _ = qt_widgets.QFileDialog.getOpenFileName(
+                dialog, "Choose executable"
+            )
+        else:
+            path = qt_widgets.QFileDialog.getExistingDirectory(
+                dialog, "Choose directory"
+            )
+        if path:
+            line_edit.setText(path)
+
+    button.clicked.connect(browse)
+    layout.addWidget(line_edit, 1)
+    layout.addWidget(button)
+    return container
+
+
+def _thermo_settings(url: str, checksum: str, executable: str) -> Any:
+    """Build helper settings from GUI text fields."""
+    from rawtrace_qc.gui.config import ThermoToolSettings
+
+    return ThermoToolSettings(
+        download_url=url.strip() or None,
+        sha256=checksum.strip() or None,
+        executable_path=Path(executable.strip()) if executable.strip() else None,
+    )
+
+
+_STYLE = """
+QMainWindow, QDialog {
+    background: #f3f7f8;
+    color: #063853;
+}
+QFrame#header {
+    background: #063853;
+    border-radius: 12px;
+}
+QLabel#appTitle {
+    color: #ffffff;
+    font-size: 28px;
+    font-weight: 700;
+}
+QLabel#appSubtitle, QLabel#muted {
+    color: #78909b;
+}
+QFrame#header QLabel#appSubtitle {
+    color: #b7d9d9;
+}
+QFrame#section, QFrame#reportBar {
+    background: #ffffff;
+    border: 1px solid #d7e3e5;
+    border-radius: 10px;
+}
+QFrame#reportBar {
+    border-left: 5px solid #40B7B5;
+}
+QLabel#count, QLabel#subheading {
+    color: #40B7B5;
+    font-weight: 700;
+}
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QListWidget, QTableWidget {
+    background: #fbfdfd;
+    border: 1px solid #bfd1d5;
+    border-radius: 6px;
+    padding: 6px;
+    selection-background-color: #40B7B5;
+    selection-color: #063853;
+}
+QListWidget, QTableWidget {
+    padding: 2px;
+}
+QPushButton {
+    background: #e8f1f2;
+    border: 1px solid #b7cdd0;
+    border-radius: 6px;
+    color: #063853;
+    padding: 8px 13px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background: #d7ecec;
+    border-color: #40B7B5;
+}
+QPushButton#primary {
+    background: #E73C40;
+    border-color: #E73C40;
+    color: #ffffff;
+}
+QPushButton#primary:hover {
+    background: #c92f34;
+}
+QHeaderView::section {
+    background: #e8f1f2;
+    border: 0;
+    color: #063853;
+    font-weight: 700;
+    padding: 7px;
+}
+QSplitter::handle {
+    background: #b7d9d9;
+    height: 5px;
+}
+"""

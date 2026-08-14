@@ -1,0 +1,99 @@
+"""Unit tests for the GUI-independent selection and configuration workflow."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from rawtrace_qc.discovery import DiscoveryCandidate, DiscoveryOptions, FileFormat, Vendor
+from rawtrace_qc.errors import ConfigurationError
+from rawtrace_qc.gui.config import GuiSettings, ThermoToolSettings, load_settings, save_settings
+from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode, filter_candidates
+from rawtrace_qc.gui.workflow import RawFileSelection
+
+
+def _candidate(tmp_path: Path, name: str) -> DiscoveryCandidate:
+    path = tmp_path / name
+    return DiscoveryCandidate(path, Vendor.THERMO, FileFormat.RAW)
+
+
+def test_filter_candidates_uses_include_or_and_exclude_wins(tmp_path: Path) -> None:
+    candidates = (
+        _candidate(tmp_path, "sample-a.raw"),
+        _candidate(tmp_path, "sample-b.raw"),
+        _candidate(tmp_path, "blank.raw"),
+    )
+    patterns = (
+        FilenamePattern("samples", r"sample-[ab]", PatternMode.INCLUDE),
+        FilenamePattern("blank", r"blank", PatternMode.EXCLUDE),
+    )
+
+    filtered = filter_candidates(candidates, patterns)
+
+    assert [item.candidate.path.name for item in filtered] == [
+        "sample-a.raw",
+        "sample-b.raw",
+        "blank.raw",
+    ]
+    assert [item.included for item in filtered] == [True, True, False]
+    assert filtered[-1].matched_pattern_names == ("blank",)
+
+
+def test_filename_pattern_rejects_invalid_regex() -> None:
+    with pytest.raises(ConfigurationError, match="invalid regular expression"):
+        FilenamePattern("broken", "[")
+
+
+def test_gui_settings_round_trip(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    settings = GuiSettings(
+        scope="recursive",
+        min_size_bytes=42,
+        min_age_seconds=12.5,
+        patterns=(FilenamePattern("run", r"run_\\d+"),),
+        cache_directory=tmp_path / "cache",
+        report_directory=tmp_path / "reports",
+        thermo=ThermoToolSettings(
+            download_url="https://example.test/helper.exe",
+            sha256="a" * 64,
+            executable_path=tmp_path / "helper.exe",
+        ),
+    )
+
+    save_settings(settings, config_path)
+    loaded = load_settings(config_path)
+
+    assert loaded == settings
+
+
+def test_selection_validates_paths_and_keeps_unique_active_entries(
+    tmp_path: Path,
+) -> None:
+    raw = tmp_path / "sample.raw"
+    raw.write_bytes(b"raw")
+    selection = RawFileSelection(DiscoveryOptions(min_size_bytes=1, min_age_seconds=0))
+
+    first = selection.add_paths((raw, raw))
+    second = selection.add_paths((tmp_path / "invalid.txt",))
+
+    assert len(first.accepted) == 2
+    assert first.rejected == ()
+    assert second.accepted == ()
+    assert second.rejected == ((tmp_path / "invalid.txt").resolve(),)
+    assert len(selection.selected) == 1
+    assert selection.active_selected() == (first.accepted[0],)
+
+
+def test_selection_promotes_only_checked_included_candidates(tmp_path: Path) -> None:
+    candidates = (
+        _candidate(tmp_path, "sample.raw"),
+        _candidate(tmp_path, "blank.raw"),
+    )
+    selection = RawFileSelection()
+    selection.set_candidates(candidates)
+    selection.apply_patterns((FilenamePattern("samples", "sample", PatternMode.INCLUDE),))
+    selection.set_candidate_active(tmp_path / "sample.raw", False)
+
+    selection.promote_active_candidates()
+
+    assert selection.selected == ()

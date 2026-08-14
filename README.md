@@ -4,7 +4,7 @@
 
 The first implementation targets Bruker timsTOF `.d` directories with a native Python extractor. Thermo `.raw` support is planned through an external helper and is not included in the initial package.
 
-The project is being developed library-first. File discovery, extraction, validated Parquet artifacts, trace processing, and report generation will be implemented and tested before the command-line tool and GUI.
+The project is being developed library-first. File discovery, extraction, validated Parquet artifacts, trace processing, report generation, and the optional GUI are implemented as clients of the same service layers.
 
 ## Development
 
@@ -22,6 +22,13 @@ uv run ruff check src
 uv run ruff format --check src
 uv run ruff format --check tests
 uv run pyrefly check
+```
+
+Install the optional PySide6 desktop GUI with:
+
+```bash
+uv sync --extra gui
+rawtrace-qc-gui
 ```
 
 Ruff formatting is applied to tests with the separate 120-character test configuration. Test linting is intentionally not enforced.

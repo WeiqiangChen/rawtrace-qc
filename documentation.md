@@ -75,6 +75,8 @@ An application should treat discovery as an input-review step before extraction 
 
 The application should not walk raw-file directories itself, inspect vendor-specific member files, or infer validity from filename suffixes. Those rules belong to the discovery service so that the command-line interface, GUI, and other library consumers behave consistently.
 
+For a single file or acquisition folder supplied by a file dialog or drag and drop, use `validate_path(path, options)`. It applies the same built-in validators and thresholds as `discover()` and returns one `DiscoveryCandidate` or `None` without traversing the parent directory.
+
 ## Scan-Trace Extraction
 
 `BrukerExtractor.extract()` reads native frame metadata from `analysis.tdf`, including `Frames.SummedIntensities` for total ion current and `Frames.MaxIntensity` for base-peak intensity when those optional columns are available. It writes schema-v1 Snappy Parquet artifacts using the naming convention `<run-name>.ms1-trace.parquet` and `<run-name>.msn-trace.parquet`.
@@ -189,8 +191,28 @@ write_html(
 	),
 )
 ```
-
 The report package is deliberately separated into report models, channel definitions, data preparation, and the Plotly HTML renderer. A later report type can reuse `ProcessedTable` and the preparation contract while providing a different renderer or HTML shell.
+
+## Desktop GUI
+
+The optional PySide6 desktop application combines discovery, raw-file selection, cached extraction, and one-button HTML report generation. Install it with the `gui` extra and launch it with the packaged entry point:
+
+```bash
+uv sync --extra gui
+rawtrace-qc-gui
+```
+
+The extra is named `gui` because it contains the desktop interface dependency. An `app` extra can remain available later for a broader application bundle without making the meaning of the current optional dependency ambiguous.
+
+Choose a source folder and scan either direct children or descendants. Selecting a new source clears the candidate list before discovery begins. The discovery service removes invalid `.raw` files and `.d` folders before they reach the candidate review window. Candidate names are shown with their full paths in tooltips. The review window supports configured filename patterns and session-only custom patterns. Include patterns are ORed, exclude patterns are ORed, and any matching exclude pattern wins. Included candidates are shown first with active checkboxes; excluded candidates are shown below in a muted style.
+
+The selected raw-file list keeps unique resolved paths, supports multi-selection removal, select-all/select-none controls, drag and drop, and file or folder dialogs. Each selected path has an active checkbox, and only active paths participate in report generation.
+
+GUI settings are stored as JSON in the platform user configuration directory. They include discovery thresholds, recursive/direct scope, preconfigured patterns, the trace-cache directory, the permanent-report directory, and ThermScanHeaderExtractor settings. Trace cache keys include source metadata, the vendor, extractor type, precision, and selected MS levels. Invalid or incomplete Parquet cache entries are rebuilt through the extractor and validated before use.
+
+Reports can be temporary, in which case the GUI owns their temporary directories until it closes, or permanent, in which case the selected report directory is used. The default report uses embedded Plotly assets and can be opened immediately in the default browser.
+
+The GUI can locate an already configured ThermScanHeaderExtractor executable or download it from the configured HTTPS URL, verifying the optional SHA-256 digest. The project does not embed a release URL because the external helper's distribution and trust source are not defined here. The current repository also does not define the helper's command-line arguments or trace-output contract, so Bruker report generation is complete while a Thermo selection reports an actionable adapter-configuration error after helper resolution.
 
 ## Developer Guide
 
