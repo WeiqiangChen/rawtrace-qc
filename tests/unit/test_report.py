@@ -214,8 +214,20 @@ class TestHtmlReport:
         palette_start = html.index("var palette = [")
         palette_end = html.index("];", palette_start)
         palette = html[palette_start:palette_end]
-        assert "#063853', '#40B7B5', '#2F6F9F'" in palette
+        assert "#063853', '#40B7B5', '#E69F00'" in palette
         assert "#E73C40" not in palette
+        assert "groupclick: 'togglegroup'" in html
+        assert "showlegend: false" in html
+        assert "mode: 'markers'" in html
+        assert "symbol: 'square'" in html
+        assert "size: 8" in html
+        assert "x: [null]" in html
+        assert "y: [null]" in html
+        assert "visible: true" in html
+        assert "rawtraceLegendProxy" in html
+        assert "[targetIndex, event.curveNumber]" in html
+        assert "plot.on('plotly_legendclick', toggleLegendTrace)" in html
+        assert "traces.concat(legendTraces)" in html
         assert "width: 1.25" in html
         assert "background: var(--facility-blue);" in html
         assert "https://cdn.plot.ly/plotly-" in html

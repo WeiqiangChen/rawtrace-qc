@@ -704,9 +704,9 @@ def _javascript(active_panel: str) -> str:
       }});
       var plot = document.getElementById('report-plot');
       var palette = [
-        '#063853', '#40B7B5', '#2F6F9F', '#26734D',
-        '#856F00', '#624A91', '#765B45', '#596B78',
-        '#5F7F2F', '#936A2F'
+        '#063853', '#40B7B5', '#E69F00', '#56B4E9',
+        '#009E73', '#F0E442', '#CC79A7', '#7A5195',
+        '#8C6D31', '#6C757D'
       ];
       var REFERENCE_COLOR = '#E73C40';
       var NORMAL_PLOT_HEIGHT = 560;
@@ -1090,6 +1090,7 @@ def _javascript(active_panel: str) -> str:
             bgcolor: 'rgba(255, 255, 255, .9)',
             bordercolor: '#d3e1e5',
             borderwidth: 1,
+            groupclick: 'togglegroup',
             font: {{size: 11, color: '#163342'}}
           }},
         }};
@@ -1106,18 +1107,27 @@ def _javascript(active_panel: str) -> str:
           align: 'center'
         }}];
       }}
+      function traceColor(trace) {{
+        return trace.table_index === state.referenceTrace
+          ? REFERENCE_COLOR
+          : palette[trace.color_index % palette.length];
+      }}
+      function traceLegendGroup(trace) {{
+        return 'trace-' + String(trace.table_index);
+      }}
       function makeTrace(trace, index, xAxis, yAxis) {{
+        var color = traceColor(trace);
         var item = {{
           x: trace.retention_time_min,
           y: trace.channels[state.channel],
           type: 'scattergl',
           mode: 'lines',
           name: trace.name,
-          legendgroup: trace.source_key,
+          legendgroup: traceLegendGroup(trace),
+          meta: {{rawtraceTableIndex: trace.table_index}},
+          showlegend: false,
           line: {{
-            color: trace.table_index === state.referenceTrace
-              ? REFERENCE_COLOR
-              : palette[trace.color_index % palette.length],
+            color: color,
             width: 1.25
           }},
           hovertemplate: 'RT: %{{x:.2f}} min<br>Intensity: %{{y:.3e}}<extra>'
@@ -1126,6 +1136,55 @@ def _javascript(active_panel: str) -> str:
         if (xAxis) item.xaxis = xAxis;
         if (yAxis) item.yaxis = yAxis;
         return item;
+      }}
+      function makeLegendTrace(trace) {{
+        return {{
+          x: [null],
+          y: [null],
+          type: 'scatter',
+          mode: 'markers',
+          name: trace.name,
+          legendgroup: traceLegendGroup(trace),
+          meta: {{
+            rawtraceTableIndex: trace.table_index,
+            rawtraceLegendProxy: true
+          }},
+          marker: {{
+            color: traceColor(trace),
+            symbol: 'square',
+            size: 8
+          }},
+          hoverinfo: 'skip',
+          visible: true,
+          showlegend: true
+        }};
+      }}
+      function toggleLegendTrace(event) {{
+        if (!plot || !event || !plot.data) return;
+        var clicked = plot.data[event.curveNumber];
+        if (!clicked || !clicked.meta || !clicked.meta.rawtraceLegendProxy) return;
+        var tableIndex = clicked.meta.rawtraceTableIndex;
+        var targetIndex = plot.data.findIndex(function (trace) {{
+          return trace.meta
+            && trace.meta.rawtraceTableIndex === tableIndex
+            && !trace.meta.rawtraceLegendProxy;
+        }});
+        if (targetIndex === -1) return false;
+        var target = plot.data[targetIndex];
+        var isVisible = target.visible !== false
+          && target.visible !== 'legendonly';
+        Plotly.restyle(
+          plot,
+          {{visible: isVisible ? 'legendonly' : true}},
+          [targetIndex, event.curveNumber]
+        );
+        return false;
+      }}
+      function bindLegendClick() {{
+        if (!plot || plot.rawtraceLegendClickBound
+            || typeof plot.on !== 'function') return;
+        plot.on('plotly_legendclick', toggleLegendTrace);
+        plot.rawtraceLegendClickBound = true;
       }}
       function render() {{
         updateMetadataRows();
@@ -1136,6 +1195,7 @@ def _javascript(active_panel: str) -> str:
         updateReferenceOptions(active);
         var layout = baseLayout();
         var traces;
+        var legendTraces = [];
         if (state.view === 'pairwise') {{
           updatePairwiseOptions(active);
           traces = pairwiseDisplayTraces(active);
@@ -1184,22 +1244,29 @@ def _javascript(active_panel: str) -> str:
               exponentformat: 'E',
               ticks: 'outside'
             }};
+            legendTraces.push(makeLegendTrace(trace));
             return makeTrace(trace, index, 'x' + suffix, 'y' + suffix);
           }});
         }} else {{
           traces = traces.map(function (trace, index) {{
+            legendTraces.push(makeLegendTrace(trace));
             return makeTrace(trace, index, null, null);
           }});
           plot.style.height = NORMAL_PLOT_HEIGHT + 'px';
           plot.style.minHeight = NORMAL_PLOT_HEIGHT + 'px';
           layout.height = NORMAL_PLOT_HEIGHT;
         }}
-        Plotly.react(
+        var reactResult = Plotly.react(
           plot,
-          traces,
+          traces.concat(legendTraces),
           layout,
           {{responsive: true, displaylogo: false, scrollZoom: true}}
         );
+        if (reactResult && typeof reactResult.then === 'function') {{
+          reactResult.then(bindLegendClick);
+        }} else {{
+          bindLegendClick();
+        }}
       }}
       function activateTab(button) {{
         document.querySelectorAll('.report-tab').forEach(function (item) {{
