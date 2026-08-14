@@ -152,6 +152,9 @@ def create_window(
             source_heading.addWidget(qt_widgets.QLabel("Discover raw files"))
             source_heading.addStretch()
             self.settings_button = qt_widgets.QPushButton("Settings")
+            self.settings_button.setToolTip(
+                "Configure discovery, cache, report, and Thermo helper settings"
+            )
             self.settings_button.clicked.connect(self._open_settings)
             source_heading.addWidget(self.settings_button)
             source_layout.addLayout(source_heading)
@@ -162,20 +165,19 @@ def create_window(
             self.source_edit.setReadOnly(True)
             choose_source = qt_widgets.QPushButton("Choose folder")
             choose_source.clicked.connect(self._choose_source)
-            self.scope_combo = qt_widgets.QComboBox()
-            self.scope_combo.addItem("Direct only", DiscoveryScope.DIRECT.value)
-            self.scope_combo.addItem(
-                "Include subfolders", DiscoveryScope.RECURSIVE.value
+            self.include_subfolders = qt_widgets.QCheckBox("Include subfolders")
+            self.include_subfolders.setChecked(
+                self._settings.scope is DiscoveryScope.RECURSIVE
             )
-            self.scope_combo.setCurrentIndex(
-                0 if self._settings.scope is DiscoveryScope.DIRECT else 1
+            self.include_subfolders.setToolTip(
+                "Search folders below the selected folder"
             )
             scan_button = qt_widgets.QPushButton("Scan folder")
             scan_button.setObjectName("primary")
             scan_button.clicked.connect(self._scan_source)
             source_row.addWidget(self.source_edit, 1)
             source_row.addWidget(choose_source)
-            source_row.addWidget(self.scope_combo)
+            source_row.addWidget(self.include_subfolders)
             source_row.addWidget(scan_button)
             source_layout.addLayout(source_row)
             self.discovery_status = qt_widgets.QLabel("No folder scanned yet")
@@ -197,9 +199,6 @@ def create_window(
             self.selected_count.setObjectName("count")
             selected_heading.addWidget(self.selected_count)
             selected_heading.addStretch()
-            review_button = qt_widgets.QPushButton("Review candidates")
-            review_button.clicked.connect(self._open_candidates)
-            selected_heading.addWidget(review_button)
             selected_layout.addLayout(selected_heading)
             self.selected_list = DropList()
             self.selected_list.setToolTip("Drop valid .raw files or .d folders here")
@@ -228,11 +227,14 @@ def create_window(
             report_layout = qt_widgets.QHBoxLayout(report_frame)
             report_layout.setContentsMargins(18, 14, 18, 14)
             report_layout.addWidget(qt_widgets.QLabel("Report"))
-            self.storage_combo = qt_widgets.QComboBox()
-            self.storage_combo.addItem("Temporary", ReportStorageMode.TEMPORARY.value)
-            self.storage_combo.addItem("Permanent", ReportStorageMode.PERMANENT.value)
-            self.storage_combo.currentIndexChanged.connect(self._storage_changed)
-            report_layout.addWidget(self.storage_combo)
+            storage_selector, _, storage_buttons = _mode_selector(
+                qt_widgets,
+                report_frame,
+                ("Temporary", "Permanent"),
+            )
+            self.temporary_storage, self.permanent_storage = storage_buttons
+            self.permanent_storage.toggled.connect(self._storage_changed)
+            report_layout.addWidget(storage_selector)
             self.report_directory_edit = qt_widgets.QLineEdit(
                 str(self._settings.report_directory)
             )
@@ -241,10 +243,13 @@ def create_window(
             browse_report = qt_widgets.QPushButton("Browse")
             browse_report.clicked.connect(self._choose_report_directory)
             report_layout.addWidget(browse_report)
-            self.precision_combo = qt_widgets.QComboBox()
-            self.precision_combo.addItem("Low precision", "low")
-            self.precision_combo.addItem("High precision", "high")
-            report_layout.addWidget(self.precision_combo)
+            precision_selector, _, precision_buttons = _mode_selector(
+                qt_widgets,
+                report_frame,
+                ("Low precision", "High precision"),
+            )
+            self.low_precision, self.high_precision = precision_buttons
+            report_layout.addWidget(precision_selector)
             self.generate_button = qt_widgets.QPushButton("Generate report")
             self.generate_button.setObjectName("primary")
             self.generate_button.clicked.connect(self._generate)
@@ -264,6 +269,14 @@ def create_window(
                 self.source_edit.setText(path)
                 self._clear_candidates()
 
+        def _selected_scope(self) -> DiscoveryScope:
+            """Return the discovery scope selected by the subfolder checkbox."""
+            return (
+                DiscoveryScope.RECURSIVE
+                if self.include_subfolders.isChecked()
+                else DiscoveryScope.DIRECT
+            )
+
         def _scan_source(self) -> None:
             nonlocal current_settings
             source_text = self.source_edit.text().strip()
@@ -271,7 +284,7 @@ def create_window(
                 self.discovery_status.setText("Choose a folder before scanning.")
                 return
             try:
-                scope = DiscoveryScope(self.scope_combo.currentData())
+                scope = self._selected_scope()
                 self._selection.options = replace(self._selection.options, scope=scope)
                 self._settings = replace(self._settings, scope=scope)
                 current_settings = self._settings
@@ -279,6 +292,9 @@ def create_window(
             except (DiscoveryError, OSError, ValueError) as error:
                 self._clear_candidates()
                 self.discovery_status.setText(str(error))
+                return
+            if not result.candidates:
+                self.discovery_status.setText("No valid rawfiles were found in folder")
                 return
             self.discovery_status.setText(
                 f"{len(result.candidates)} valid candidate(s) found"
@@ -296,7 +312,7 @@ def create_window(
 
         def _open_candidates(self) -> None:
             if not self._selection.candidates:
-                self.discovery_status.setText("Scan a folder to review candidates.")
+                self.discovery_status.setText("No valid rawfiles were found in folder")
                 return
             dialog = qt_widgets.QDialog(self)
             dialog.setWindowTitle("Candidate raw files")
@@ -334,13 +350,16 @@ def create_window(
             custom_name.setPlaceholderText("Custom pattern name")
             custom_expression = qt_widgets.QLineEdit()
             custom_expression.setPlaceholderText("Regular expression")
-            custom_mode = qt_widgets.QComboBox()
-            custom_mode.addItem("Include", PatternMode.INCLUDE.value)
-            custom_mode.addItem("Exclude", PatternMode.EXCLUDE.value)
+            custom_mode_selector, _, custom_mode_buttons = _mode_selector(
+                qt_widgets,
+                dialog,
+                ("Include", "Exclude"),
+            )
+            custom_include, custom_exclude = custom_mode_buttons
             add_pattern = qt_widgets.QPushButton("Add custom pattern")
             custom_row.addWidget(custom_name)
             custom_row.addWidget(custom_expression, 1)
-            custom_row.addWidget(custom_mode)
+            custom_row.addWidget(custom_mode_selector)
             custom_row.addWidget(add_pattern)
             layout.addLayout(custom_row)
 
@@ -373,14 +392,22 @@ def create_window(
                 try:
                     for row in range(pattern_table.rowCount()):
                         check = pattern_table.cellWidget(row, 0)
-                        mode_box = pattern_table.cellWidget(row, 3)
+                        mode_selector = pattern_table.cellWidget(row, 3)
+                        mode_group = mode_selector.findChild(qt_widgets.QButtonGroup)
+                        if mode_group is None:
+                            raise AttributeError("Pattern mode selector is missing.")
+                        mode = (
+                            PatternMode.EXCLUDE
+                            if mode_group.checkedId() == 1
+                            else PatternMode.INCLUDE
+                        )
                         pattern = definitions[row]
                         if include_disabled or check.isChecked():
                             patterns.append(
                                 FilenamePattern(
                                     pattern.name,
                                     pattern.expression,
-                                    mode_box.currentData(),
+                                    mode,
                                 )
                             )
                 except (ConfigurationError, AttributeError) as error:
@@ -433,6 +460,17 @@ def create_window(
                 self._selection.apply_patterns(active)
                 render_candidates()
 
+            def pattern_mode_selector(mode: PatternMode) -> Any:
+                selector, mode_group, mode_buttons = _mode_selector(
+                    qt_widgets,
+                    dialog,
+                    ("Include", "Exclude"),
+                )
+                mode_buttons[0].setChecked(mode is PatternMode.INCLUDE)
+                mode_buttons[1].setChecked(mode is PatternMode.EXCLUDE)
+                mode_group.buttonToggled.connect(lambda *_args: refresh_patterns())
+                return selector
+
             def rebuild_pattern_table() -> None:
                 pattern_table.blockSignals(True)
                 pattern_table.setRowCount(0)
@@ -448,14 +486,9 @@ def create_window(
                     pattern_table.setItem(
                         row, 2, qt_widgets.QTableWidgetItem(pattern.expression)
                     )
-                    mode_box = qt_widgets.QComboBox()
-                    mode_box.addItem("Include", PatternMode.INCLUDE.value)
-                    mode_box.addItem("Exclude", PatternMode.EXCLUDE.value)
-                    mode_box.setCurrentIndex(
-                        0 if pattern.mode is PatternMode.INCLUDE else 1
+                    pattern_table.setCellWidget(
+                        row, 3, pattern_mode_selector(pattern.mode)
                     )
-                    mode_box.currentIndexChanged.connect(refresh_patterns)
-                    pattern_table.setCellWidget(row, 3, mode_box)
                 pattern_table.blockSignals(False)
 
             def candidate_item_changed(item: Any) -> None:
@@ -470,10 +503,15 @@ def create_window(
 
             def add_custom_pattern() -> None:
                 try:
+                    mode = (
+                        PatternMode.EXCLUDE
+                        if custom_exclude.isChecked()
+                        else PatternMode.INCLUDE
+                    )
                     pattern = FilenamePattern(
                         custom_name.text(),
                         custom_expression.text(),
-                        custom_mode.currentData(),
+                        mode,
                     )
                 except ConfigurationError as error:
                     qt_widgets.QMessageBox.warning(
@@ -610,9 +648,7 @@ def create_window(
             self._refresh_selected()
 
         def _storage_changed(self) -> None:
-            permanent = (
-                self.storage_combo.currentData() == ReportStorageMode.PERMANENT.value
-            )
+            permanent = self.permanent_storage.isChecked()
             self.report_directory_edit.setEnabled(permanent)
 
         def _choose_report_directory(self) -> None:
@@ -632,12 +668,18 @@ def create_window(
                 )
                 return
             try:
-                storage_mode = ReportStorageMode(self.storage_combo.currentData())
+                storage_mode = (
+                    ReportStorageMode.PERMANENT
+                    if self.permanent_storage.isChecked()
+                    else ReportStorageMode.TEMPORARY
+                )
                 output_directory = Path(self.report_directory_edit.text())
                 options = ReportGenerationOptions(
                     storage_mode=storage_mode,
                     output_directory=output_directory,
-                    precision_mode=self.precision_combo.currentData(),
+                    precision_mode=(
+                        "high" if self.high_precision.isChecked() else "low"
+                    ),
                 )
             except (ConfigurationError, ValueError) as error:
                 self.discovery_status.setText(str(error))
@@ -676,13 +718,17 @@ def create_window(
             helper_path = qt_widgets.QLineEdit(
                 str(self._settings.thermo.executable_path or "")
             )
-            size_spin = qt_widgets.QSpinBox()
-            size_spin.setRange(0, 2**63 - 1)
-            size_spin.setValue(self._settings.min_size_bytes)
+            size_edit = qt_widgets.QLineEdit(str(self._settings.min_size_bytes))
+            size_edit.setValidator(
+                qt_gui.QRegularExpressionValidator(
+                    qt_core.QRegularExpression("[0-9]*"),
+                    size_edit,
+                )
+            )
             age_spin = qt_widgets.QDoubleSpinBox()
             age_spin.setRange(0, 10**9)
             age_spin.setValue(self._settings.min_age_seconds)
-            form.addRow("Minimum file size", size_spin)
+            form.addRow("Minimum file size (bytes)", size_edit)
             form.addRow("Minimum age (seconds)", age_spin)
             form.addRow("Trace cache", _path_editor(cache_edit, dialog, False))
             form.addRow("Permanent reports", _path_editor(report_edit, dialog, False))
@@ -712,7 +758,7 @@ def create_window(
                     helper_url,
                     helper_hash,
                     helper_path,
-                    size_spin,
+                    size_edit,
                     age_spin,
                 )
             )
@@ -728,14 +774,19 @@ def create_window(
             helper_url: Any,
             helper_hash: Any,
             helper_path: Any,
-            size_spin: Any,
+            size_edit: Any,
             age_spin: Any,
         ) -> None:
             nonlocal cache, current_settings
             try:
+                size_text = size_edit.text().strip()
+                if not size_text:
+                    raise ConfigurationError(
+                        "Minimum file size must be a non-negative integer."
+                    )
                 updated = GuiSettings(
-                    scope=DiscoveryScope(self.scope_combo.currentData()),
-                    min_size_bytes=size_spin.value(),
+                    scope=self._selected_scope(),
+                    min_size_bytes=int(size_text),
                     min_age_seconds=age_spin.value(),
                     patterns=tuple(self._saved_patterns),
                     cache_directory=Path(cache_edit.text()),
@@ -747,7 +798,7 @@ def create_window(
                     ),
                 )
                 save_settings(updated, settings_path)
-            except (ConfigurationError, OSError) as error:
+            except (ConfigurationError, OSError, ValueError) as error:
                 qt_widgets.QMessageBox.critical(dialog, "Invalid settings", str(error))
                 return
             self._settings = updated
@@ -768,6 +819,10 @@ def create_window(
                 event.ignore()
                 return
             try:
+                self._settings = replace(
+                    self._settings,
+                    scope=self._selected_scope(),
+                )
                 save_settings(self._settings, settings_path)
             except ConfigurationError as error:
                 qt_widgets.QMessageBox.warning(
@@ -795,6 +850,29 @@ def _load_qt() -> tuple[Any, Any, Any]:
         raise RuntimeError(
             "The GUI requires PySide6. Install it with `uv sync --extra gui`."
         ) from error
+
+
+def _mode_selector(
+    qt_widgets: Any,
+    parent: Any,
+    labels: tuple[str, str],
+) -> tuple[Any, Any, tuple[Any, Any]]:
+    """Build a compact two-option selector from radio buttons."""
+    container = qt_widgets.QWidget(parent)
+    container.setObjectName("modeSelector")
+    layout = qt_widgets.QHBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(0)
+    group = qt_widgets.QButtonGroup(container)
+    first = qt_widgets.QRadioButton(labels[0], container)
+    second = qt_widgets.QRadioButton(labels[1], container)
+    for button in (first, second):
+        button.setObjectName("modeOption")
+        layout.addWidget(button)
+    group.addButton(first, 0)
+    group.addButton(second, 1)
+    first.setChecked(True)
+    return container, group, (first, second)
 
 
 def _path_editor(line_edit: Any, dialog: Any, file_mode: bool) -> Any:
@@ -866,13 +944,36 @@ QLabel#count, QLabel#subheading {
     color: #40B7B5;
     font-weight: 700;
 }
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QListWidget, QTableWidget {
+QLineEdit, QSpinBox, QDoubleSpinBox, QListWidget, QTableWidget {
     background: #fbfdfd;
     border: 1px solid #bfd1d5;
     border-radius: 6px;
     padding: 6px;
     selection-background-color: #40B7B5;
     selection-color: #063853;
+}
+QWidget#modeSelector {
+    background: #e8f1f2;
+    border: 1px solid #b7cdd0;
+    border-radius: 6px;
+}
+QRadioButton#modeOption {
+    background: transparent;
+    border: 0;
+    color: #063853;
+    padding: 7px 10px;
+    spacing: 0;
+}
+QRadioButton#modeOption::indicator {
+    height: 0;
+    width: 0;
+}
+QRadioButton#modeOption:hover {
+    background: #d7ecec;
+}
+QRadioButton#modeOption:checked {
+    background: #40B7B5;
+    color: #063853;
 }
 QListWidget, QTableWidget {
     padding: 2px;
