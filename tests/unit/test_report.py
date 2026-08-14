@@ -183,6 +183,14 @@ class TestHtmlReport:
         assert 'id="report-previous-trace"' in html
         assert 'id="report-next-trace"' in html
         assert '"table_index":0' in html
+        assert 'class="metadata-sort-button"' in html
+        assert 'data-sort-field="label"' in html
+        assert 'data-table-index="0"' in html
+        assert '"metadata_rows":[{"table_index":0' in html
+        assert "function cycleMetadataSort(field)" in html
+        assert "state.sorts.push" in html
+        assert "return sortedTraces().filter(isVisible)" in html
+        assert "updateMetadataRows();" in html
         assert "selectedTraceIndices" in html
         assert "comparisonCandidates" in html
         assert "state.view === 'pairwise'" in html
@@ -209,6 +217,17 @@ class TestHtmlReport:
         assert "background: var(--facility-blue);" in html
         assert "https://cdn.plot.ly/plotly-" in html
         assert "retention_time_min" in html
+
+    def test_render_html_preserves_all_metadata_rows(self) -> None:
+        html = render_html(
+            [_processed_table(label="first.d"), _processed_table(label="second.d")],
+            options=ReportOptions(asset_mode=ReportAssetMode.CDN),
+        )
+
+        assert html.count('<tr data-table-index="') == 2
+        assert '<tr data-table-index="1">' in html
+        assert "<td>first.d</td>" in html
+        assert "<td>second.d</td>" in html
 
     def test_write_html_creates_parent_and_returns_resolved_path(self, tmp_path: Path) -> None:
         output_path = write_html(

@@ -236,16 +236,26 @@ def _render_metadata_panel(report: ReportDocument) -> str:
         content = '<p class="empty-state">No processed tables were supplied.</p>'
     else:
         headers = "".join(
-            f'<th scope="col">{escape(_field_label(field))}</th>'
+            f'<th scope="col" aria-sort="none">'
+            f'<button type="button" class="metadata-sort-button" '
+            f'data-sort-field="{escape(field, quote=True)}" '
+            f'aria-label="Sort by {escape(_field_label(field), quote=True)}">'
+            f"<span>{escape(_field_label(field))}</span>"
+            '<span class="metadata-sort-indicator" aria-hidden="true"></span>'
+            "</button></th>"
             for field in report.metadata_fields
         )
-        rows = []
-        for row in report.metadata_rows:
-            cells = "".join(
-                f"<td>{escape(_display_metadata_value(value))}</td>"
-                for _, value in row.values
+        rows = [
+            (
+                f'<tr data-table-index="{row_index}">'
+                + "".join(
+                    "<td>" + escape(_display_metadata_value(value)) + "</td>"
+                    for _, value in row.values
+                )
+                + "</tr>"
             )
-            rows.append(f"<tr>{cells}</tr>")
+            for row_index, row in enumerate(report.metadata_rows)
+        ]
         content = (
             '<div class="metadata-table-wrap"><table class="metadata-table">'
             f"<thead><tr>{headers}</tr></thead>"
@@ -282,6 +292,13 @@ def _report_payload(report: ReportDocument) -> dict[str, object]:
             for channel in report.channels
         },
         "available_faims_values": list(report.available_faims_values),
+        "metadata_rows": [
+            {
+                "table_index": row_index,
+                "values": {field: value for field, value in row.values},
+            }
+            for row_index, row in enumerate(report.metadata_rows)
+        ],
         "traces": [
             {
                 "table_index": trace.table_index,
@@ -427,6 +444,7 @@ def _css() -> str:
       background: linear-gradient(to bottom, var(--surface), #f4fbfb);
     }
     .report-tab:focus-visible,
+    .metadata-sort-button:focus-visible,
     .report-toolbar select:focus-visible,
     .report-toolbar button:focus-visible {
       outline: 3px solid var(--focus);
@@ -612,6 +630,29 @@ def _css() -> str:
       font-weight: 700;
       text-transform: uppercase;
     }
+    .metadata-sort-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      line-height: inherit;
+      text-align: left;
+      text-transform: inherit;
+    }
+    .metadata-sort-button:hover { color: #d8ebee; }
+    .metadata-sort-indicator {
+      min-width: 2.5em;
+      color: var(--facility-teal);
+      font-size: 10px;
+      text-align: right;
+    }
     .metadata-table tbody tr:nth-child(even) td { background: var(--surface-raised); }
     .metadata-table tbody tr:hover td { background: #eef9f8; }
     .metadata-table tr:last-child td { border-bottom: 0; }
@@ -650,6 +691,17 @@ def _javascript(active_panel: str) -> str:
       var data = JSON.parse(
         document.getElementById('rawtrace-report-data').textContent
       );
+      var metadataTable = document.querySelector('.metadata-table');
+      var metadataBody = metadataTable
+        ? metadataTable.querySelector('tbody')
+        : null;
+      var sortButtons = metadataTable
+        ? metadataTable.querySelectorAll('.metadata-sort-button')
+        : [];
+      var metadataByTableIndex = {{}};
+      (data.metadata_rows || []).forEach(function (row) {{
+        metadataByTableIndex[row.table_index] = row.values || {{}};
+      }});
       var plot = document.getElementById('report-plot');
       var palette = [
         '#063853', '#40B7B5', '#2F6F9F', '#26734D',
@@ -668,7 +720,8 @@ def _javascript(active_panel: str) -> str:
         view: data.initial_view,
         referenceTrace: null,
         selectedTraceIndices: null,
-        comparisonTrace: null
+        comparisonTrace: null,
+        sorts: []
       }};
       var reference = document.getElementById('report-reference');
       var selectedControl = document.getElementById(
@@ -695,13 +748,106 @@ def _javascript(active_panel: str) -> str:
         if (typeof left === 'number') return Number(right) === left;
         return String(left) === String(right);
       }}
+      function compareMetadataValues(left, right) {{
+        var leftMissing = left === null || left === undefined;
+        var rightMissing = right === null || right === undefined;
+        if (leftMissing || rightMissing) {{
+          if (leftMissing && rightMissing) return 0;
+          return leftMissing ? 1 : -1;
+        }}
+        if (Array.isArray(left)) left = left.join(', ') || 'None';
+        if (Array.isArray(right)) right = right.join(', ') || 'None';
+        if (typeof left === 'number' && typeof right === 'number') {{
+          return left < right ? -1 : left > right ? 1 : 0;
+        }}
+        return String(left).localeCompare(String(right), undefined, {{
+          numeric: true,
+          sensitivity: 'base'
+        }});
+      }}
+      function sortedTraces() {{
+        var traces = data.traces.slice();
+        if (!state.sorts.length) return traces;
+        return traces.sort(function (left, right) {{
+          var leftValues = metadataByTableIndex[left.table_index] || {{}};
+          var rightValues = metadataByTableIndex[right.table_index] || {{}};
+          for (var index = 0; index < state.sorts.length; index += 1) {{
+            var sort = state.sorts[index];
+            var result = compareMetadataValues(
+              leftValues[sort.field],
+              rightValues[sort.field]
+            );
+            if (result !== 0) return result * sort.direction;
+          }}
+          return left.table_index - right.table_index;
+        }});
+      }}
+      function updateMetadataRows() {{
+        if (!metadataBody) return;
+        var rowsByIndex = {{}};
+        metadataBody.querySelectorAll('tr[data-table-index]').forEach(
+          function (row) {{
+            rowsByIndex[row.dataset.tableIndex] = row;
+          }}
+        );
+        sortedTraces().forEach(function (trace) {{
+          var row = rowsByIndex[String(trace.table_index)];
+          if (row) metadataBody.appendChild(row);
+        }});
+      }}
+      function updateSortIndicators() {{
+        sortButtons.forEach(function (button) {{
+          var field = button.dataset.sortField;
+          var sortIndex = state.sorts.findIndex(function (item) {{
+            return item.field === field;
+          }});
+          var header = button.closest('th');
+          var indicator = button.querySelector('.metadata-sort-indicator');
+          var label = button.firstElementChild
+            ? button.firstElementChild.textContent
+            : 'column';
+          if (sortIndex === -1) {{
+            if (header) header.setAttribute('aria-sort', 'none');
+            if (indicator) indicator.textContent = '';
+            button.setAttribute('aria-label', 'Sort by ' + label);
+            return;
+          }}
+          var sort = state.sorts[sortIndex];
+          var directionLabel = sort.direction === 1 ? 'ascending' : 'descending';
+          if (header) header.setAttribute('aria-sort', directionLabel);
+          if (indicator) {{
+            var symbol = sort.direction === 1
+              ? String.fromCharCode(9650)
+              : String.fromCharCode(9660);
+            indicator.textContent = String(sortIndex + 1) + ' ' + symbol;
+          }}
+          button.setAttribute(
+            'aria-label',
+            'Sort by ' + label + ' ' + directionLabel
+              + ', priority ' + String(sortIndex + 1)
+          );
+        }});
+      }}
+      function cycleMetadataSort(field) {{
+        var sortIndex = state.sorts.findIndex(function (item) {{
+          return item.field === field;
+        }});
+        if (sortIndex === -1) {{
+          state.sorts.push({{field: field, direction: 1}});
+        }} else if (state.sorts[sortIndex].direction === 1) {{
+          state.sorts[sortIndex].direction = -1;
+        }} else {{
+          state.sorts.splice(sortIndex, 1);
+        }}
+        render();
+      }}
       function isVisible(trace) {{
         if (state.msLevel !== null && trace.ms_level !== state.msLevel) return false;
         if (trace.faims_cv === null || trace.faims_cv === undefined) return true;
         return state.cv === 'all' || sameCv(trace.faims_cv, state.cv);
       }}
       function activeTraces() {{
-        return data.traces.filter(isVisible).filter(function (trace) {{
+        return sortedTraces().filter(isVisible).filter(function (trace) {{
           return trace.channels[state.channel] !== undefined;
         }});
       }}
@@ -977,6 +1123,8 @@ def _javascript(active_panel: str) -> str:
         return item;
       }}
       function render() {{
+        updateMetadataRows();
+        updateSortIndicators();
         if (!plot || !window.Plotly || !state.channel) return;
         var active = activeTraces();
         updateViewControls();
@@ -1064,6 +1212,11 @@ def _javascript(active_panel: str) -> str:
       }}
       document.querySelectorAll('.report-tab').forEach(function (button) {{
         button.addEventListener('click', function () {{ activateTab(button); }});
+      }});
+      sortButtons.forEach(function (button) {{
+        button.addEventListener('click', function () {{
+          cycleMetadataSort(button.dataset.sortField);
+        }});
       }});
       var ms = document.getElementById('report-ms-level');
       if (ms) {{
