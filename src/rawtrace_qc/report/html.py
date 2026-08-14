@@ -151,9 +151,11 @@ def _render_plot_panel(report: ReportDocument) -> str:
     )
     controls = f"""
       <div class="report-toolbar">
-        <label>MS level <select id="report-ms-level">{ms_options}</select></label>
+        <label class="report-control-ms">
+          MS level <select id="report-ms-level">{ms_options}</select>
+        </label>
         {_render_faims_control(report)}
-        <label>View <select id="report-view">
+        <label class="report-control-view">View <select id="report-view">
           <option value="overlay">Overlay</option>
           <option value="stacked">Stacked</option>
           <option value="pairwise">Pairwise</option>
@@ -211,7 +213,20 @@ def _render_plot_panel(report: ReportDocument) -> str:
           </div>
         </div>
       </div>
-      <div id="report-plot" role="img" aria-label="Chromatogram plot"></div>
+      <div id="report-plot-shell" class="report-plot-shell">
+        <div class="report-plot-actions">
+          <button
+            id="report-fullscreen-toggle"
+            class="report-fullscreen-toggle"
+            type="button"
+            aria-controls="report-plot-shell"
+            aria-label="Enter fullscreen plot"
+            aria-pressed="false"
+            title="Enter fullscreen plot"
+          ><span aria-hidden="true">&#x26F6;</span></button>
+        </div>
+        <div id="report-plot" role="img" aria-label="Chromatogram plot"></div>
+      </div>
 """
     return (
         '<section id="plot-panel" class="report-panel" role="tabpanel">'
@@ -445,7 +460,8 @@ def _css() -> str:
     .report-tab:focus-visible,
     .metadata-sort-button:focus-visible,
     .report-toolbar select:focus-visible,
-    .report-toolbar button:focus-visible {
+    .report-toolbar button:focus-visible,
+    .report-fullscreen-toggle:focus-visible {
       outline: 3px solid var(--focus);
       outline-offset: 2px;
     }
@@ -488,6 +504,14 @@ def _css() -> str:
     .report-toolbar select:hover {
       border-color: var(--accent);
       background: var(--surface-raised);
+    }
+    .report-control-ms select {
+      width: 72px;
+      padding-right: 22px;
+    }
+    .report-control-view select {
+      width: 92px;
+      padding-right: 22px;
     }
     .report-toolbar select:disabled,
     .report-toolbar button:disabled {
@@ -591,7 +615,7 @@ def _css() -> str:
       font-size: 19px !important;
       line-height: 1;
     }
-    #report-plot {
+    .report-plot-shell {
       width: 100%;
       min-height: 560px;
       background: var(--surface);
@@ -599,6 +623,72 @@ def _css() -> str:
       border-radius: 6px;
       box-shadow: 0 3px 12px rgba(6, 56, 83, .08);
       overflow: hidden;
+    }
+    .report-plot-shell.is-stacked {
+      min-height: min(560px, calc(100vh - 190px));
+      max-height: min(720px, calc(100vh - 190px));
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
+    .report-plot-actions {
+      display: flex;
+      justify-content: flex-end;
+      min-height: 45px;
+      padding: 10px 10px 0;
+      background: var(--surface);
+    }
+    .report-fullscreen-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      min-height: 34px;
+      border: 1px solid #b9ccd2;
+      border-radius: 4px;
+      padding: 6px;
+      background: rgba(255, 255, 255, .94);
+      color: var(--facility-blue);
+      cursor: pointer;
+      font: 600 13px "Aptos", "Segoe UI", "Helvetica Neue", sans-serif;
+      box-shadow: 0 2px 8px rgba(6, 56, 83, .12);
+    }
+    .report-fullscreen-toggle span {
+      font-size: 20px;
+      line-height: 1;
+    }
+    .report-fullscreen-toggle:hover:not(:disabled) {
+      border-color: var(--accent);
+      background: var(--surface-raised);
+    }
+    .report-fullscreen-toggle:disabled {
+      cursor: not-allowed;
+      opacity: .55;
+    }
+    #report-plot {
+      width: 100%;
+      min-height: 560px;
+      background: var(--surface);
+    }
+    .report-plot-shell:fullscreen,
+    .report-plot-shell:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      min-height: 0;
+      max-height: none;
+      max-width: none;
+      margin: 0;
+      padding: 12px;
+      background: var(--canvas);
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      overflow: auto;
+    }
+    .report-plot-shell:fullscreen #report-plot,
+    .report-plot-shell:-webkit-full-screen #report-plot {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
     }
     #report-plot .modebar { top: 8px !important; right: 8px !important; }
     .metadata-table-wrap {
@@ -674,10 +764,13 @@ def _css() -> str:
       .report-toolbar { align-items: stretch; padding: 12px; }
       .report-toolbar label { flex: 1 1 160px; justify-content: space-between; }
       .report-toolbar select { flex: 1; }
+      .report-control-ms select,
+      .report-control-view select { width: auto; }
       .report-picker { flex: 1 1 160px; }
       .report-picker-toggle { width: 100%; justify-content: space-between; }
       .report-pairwise-control { flex: 1 1 260px; }
       .report-pairwise-control > label { flex: 1; justify-content: space-between; }
+      .report-plot-shell { min-height: 420px; }
       #report-plot { min-height: 420px; }
       .metadata-table { min-width: 640px; }
     }
@@ -702,6 +795,10 @@ def _javascript(active_panel: str) -> str:
         metadataByTableIndex[row.table_index] = row.values || {{}};
       }});
       var plot = document.getElementById('report-plot');
+      var plotShell = document.getElementById('report-plot-shell');
+      var fullscreenToggle = document.getElementById(
+        'report-fullscreen-toggle'
+      );
       var palette = [
         '#063853', '#40B7B5', '#E69F00', '#56B4E9',
         '#009E73', '#7F1D1D', '#CC79A7', '#885ba6',
@@ -1034,6 +1131,15 @@ def _javascript(active_panel: str) -> str:
         render();
         if (comparison && !comparison.disabled) comparison.focus();
       }}
+      function handleComparisonKey(event) {{
+        if (state.view !== 'pairwise' || !comparison || comparison.disabled) return;
+        var direction = 0;
+        if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') direction = -1;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowRight') direction = 1;
+        if (direction === 0) return;
+        event.preventDefault();
+        cycleComparison(direction);
+      }}
       function baseLayout() {{
         var channelSpec = data.channels[state.channel] || {{}};
         return {{
@@ -1093,6 +1199,69 @@ def _javascript(active_panel: str) -> str:
             font: {{size: 11, color: '#163342'}}
           }},
         }};
+      }}
+      function fullscreenElement() {{
+        return document.fullscreenElement
+          || document.webkitFullscreenElement
+          || null;
+      }}
+      function isPlotFullscreen() {{
+        return Boolean(plotShell && fullscreenElement() === plotShell);
+      }}
+      function fullscreenSupported() {{
+        return Boolean(
+          plotShell
+          && (plotShell.requestFullscreen || plotShell.webkitRequestFullscreen)
+        );
+      }}
+      function updateFullscreenToggle() {{
+        if (!fullscreenToggle) return;
+        if (!fullscreenSupported()) {{
+          fullscreenToggle.disabled = true;
+          fullscreenToggle.setAttribute(
+            'aria-label',
+            'Fullscreen is not supported by this browser'
+          );
+          fullscreenToggle.title = 'Fullscreen is not supported by this browser';
+          return;
+        }}
+        var active = isPlotFullscreen();
+        fullscreenToggle.disabled = false;
+        fullscreenToggle.setAttribute(
+          'aria-label',
+          active ? 'Exit fullscreen plot' : 'Enter fullscreen plot'
+        );
+        fullscreenToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
+        fullscreenToggle.title = active
+          ? 'Exit fullscreen plot'
+          : 'Enter fullscreen plot';
+      }}
+      function exitPlotFullscreen() {{
+        var exit = document.exitFullscreen || document.webkitExitFullscreen;
+        if (exit) exit.call(document);
+      }}
+      function togglePlotFullscreen() {{
+        if (!plotShell || !fullscreenSupported()) return;
+        if (isPlotFullscreen()) {{
+          exitPlotFullscreen();
+          return;
+        }}
+        var request = plotShell.requestFullscreen
+          || plotShell.webkitRequestFullscreen;
+        var result = request.call(plotShell);
+        if (result && typeof result.catch === 'function') {{
+          result.catch(updateFullscreenToggle);
+        }}
+      }}
+      function fullscreenPlotHeight(defaultHeight) {{
+        if (!isPlotFullscreen() || !plotShell) return defaultHeight;
+        var actions = document.querySelector('.report-plot-actions');
+        var actionHeight = actions ? actions.offsetHeight : 0;
+        return Math.max(
+          320,
+          plotShell.clientHeight - 24 - actionHeight,
+          defaultHeight
+        );
       }}
       function addEmptyMessage(layout, message) {{
         layout.annotations = [{{
@@ -1202,6 +1371,10 @@ def _javascript(active_panel: str) -> str:
           updateSelectedTraceOptions(active);
           traces = orderedTraces(selectedDisplayTraces(active));
         }}
+        if (plotShell) plotShell.classList.toggle(
+          'is-stacked',
+          state.view === 'stacked' && traces.length > 0
+        );
         if (!traces.length) {{
           var emptyMessage = state.view === 'pairwise'
             ? state.referenceTrace === null
@@ -1212,9 +1385,10 @@ def _javascript(active_panel: str) -> str:
         }}
         if (state.view === 'stacked' && traces.length) {{
           var stackedHeight = traces.length * STACKED_TRACE_HEIGHT;
-          plot.style.height = stackedHeight + 'px';
-          plot.style.minHeight = stackedHeight + 'px';
-          layout.height = stackedHeight;
+          var displayHeight = fullscreenPlotHeight(stackedHeight);
+          plot.style.height = displayHeight + 'px';
+          plot.style.minHeight = displayHeight + 'px';
+          layout.height = displayHeight;
           layout.grid = {{
             rows: traces.length,
             columns: 1,
@@ -1247,13 +1421,14 @@ def _javascript(active_panel: str) -> str:
             return makeTrace(trace, index, 'x' + suffix, 'y' + suffix);
           }});
         }} else {{
+          var displayHeight = fullscreenPlotHeight(NORMAL_PLOT_HEIGHT);
           traces = traces.map(function (trace, index) {{
             legendTraces.push(makeLegendTrace(trace));
             return makeTrace(trace, index, null, null);
           }});
-          plot.style.height = NORMAL_PLOT_HEIGHT + 'px';
-          plot.style.minHeight = NORMAL_PLOT_HEIGHT + 'px';
-          layout.height = NORMAL_PLOT_HEIGHT;
+          plot.style.height = displayHeight + 'px';
+          plot.style.minHeight = displayHeight + 'px';
+          layout.height = displayHeight;
         }}
         var reactResult = Plotly.react(
           plot,
@@ -1339,9 +1514,22 @@ def _javascript(active_panel: str) -> str:
         }}
       }});
       document.addEventListener('keydown', function (event) {{
+        if (event.key === 'Escape' && isPlotFullscreen()) {{
+          exitPlotFullscreen();
+          return;
+        }}
         if (event.key === 'Escape' && selectedMenu && !selectedMenu.hidden) {{
           closeSelectedMenu();
           if (selectedToggle) selectedToggle.focus();
+        }}
+        if (
+          event.target !== comparison
+          && event.target
+          && !event.target.matches(
+            'select, input, textarea, [contenteditable="true"]'
+          )
+        ) {{
+          handleComparisonKey(event);
         }}
       }});
       if (comparison) {{
@@ -1352,12 +1540,7 @@ def _javascript(active_panel: str) -> str:
           render();
         }});
         comparison.addEventListener('keydown', function (event) {{
-          var direction = 0;
-          if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') direction = -1;
-          if (event.key === 'ArrowDown' || event.key === 'ArrowRight') direction = 1;
-          if (direction === 0 || comparison.disabled) return;
-          event.preventDefault();
-          cycleComparison(direction);
+          handleComparisonKey(event);
         }});
       }}
       if (previousTrace) previousTrace.addEventListener('click', function () {{
@@ -1366,6 +1549,16 @@ def _javascript(active_panel: str) -> str:
       if (nextTrace) nextTrace.addEventListener('click', function () {{
         cycleComparison(1);
       }});
+      function handleFullscreenChange() {{
+        updateFullscreenToggle();
+        render();
+      }}
+      if (fullscreenToggle) {{
+        fullscreenToggle.addEventListener('click', togglePlotFullscreen);
+        updateFullscreenToggle();
+      }}
+      document.addEventListener('fullscreenchange', handleFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
       document.getElementById('{active_panel}').hidden = false;
       document.querySelectorAll('.report-panel').forEach(function (panel) {{
         if (panel.id !== '{active_panel}') panel.hidden = true;

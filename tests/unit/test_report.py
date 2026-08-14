@@ -169,7 +169,7 @@ class TestHtmlReport:
         assert '"available_ms_levels":[1]' in html
         assert "dashForLevel" not in html
         assert "STACKED_TRACE_HEIGHT" in html
-        assert "layout.height = stackedHeight" in html
+        assert "layout.height = displayHeight" in html
         assert "rows: traces.length" in html
         assert "index === traces.length - 1" in html
         assert "Metadata" in html
@@ -184,6 +184,11 @@ class TestHtmlReport:
         assert 'id="report-comparison-trace"' in html
         assert 'id="report-previous-trace"' in html
         assert 'id="report-next-trace"' in html
+        assert 'id="report-plot-shell"' in html
+        assert 'class="report-plot-actions"' in html
+        assert 'id="report-fullscreen-toggle"' in html
+        assert 'aria-label="Enter fullscreen plot"' in html
+        assert "&#x26F6;" in html
         assert '"table_index":0' in html
         assert 'class="metadata-sort-button"' in html
         assert 'data-sort-field="label"' in html
@@ -230,6 +235,14 @@ class TestHtmlReport:
         assert "[targetIndex, event.curveNumber]" in html
         assert "plot.on('plotly_legendclick', toggleLegendTrace)" in html
         assert "traces.concat(legendTraces)" in html
+        assert "requestFullscreen" in html
+        assert "fullscreenchange" in html
+        assert "event.key === 'Escape' && isPlotFullscreen()" in html
+        assert "function fullscreenPlotHeight(defaultHeight)" in html
+        assert "report-plot-shell.is-stacked" in html
+        assert "overflow-y: auto" in html
+        assert "function handleComparisonKey(event)" in html
+        assert "event.target !== comparison" in html
         assert "width: 1.25" in html
         assert "background: var(--facility-blue);" in html
         assert f"https://cdn.plot.ly/plotly-{get_plotlyjs_version()}.min.js" in html
@@ -266,4 +279,5 @@ class TestHtmlReport:
 
         assert 'data-panel="metadata-panel"' in html
         assert 'id="report-plot"' not in html
+        assert 'id="report-plot-shell"' not in html
         assert "Metadata" in html
