@@ -208,7 +208,7 @@ Choose a source folder and scan either direct children or descendants. Selecting
 
 The selected raw-file list keeps unique resolved paths, supports multi-selection removal, select-all/select-none controls, drag and drop, and file or folder dialogs. Each selected path has an active checkbox, and only active paths participate in report generation.
 
-GUI settings are stored as JSON in the platform user configuration directory. They include discovery thresholds, recursive/direct scope, preconfigured patterns, the trace-cache directory, the permanent-report directory, and ThermScanHeaderExtractor settings. Trace cache keys include source metadata, the vendor, extractor type, precision, and selected MS levels. Invalid or incomplete Parquet cache entries are rebuilt through the extractor and validated before use.
+GUI settings are stored as JSON in the platform user configuration directory. They include discovery thresholds in megabytes and minutes (converted internally to bytes and seconds for discovery), recursive/direct scope, preconfigured patterns, the trace-cache directory, the permanent-report directory, and ThermScanHeaderExtractor settings. Trace cache keys include source metadata, the vendor, extractor type, precision, and selected MS levels. Invalid or incomplete Parquet cache entries are rebuilt through the extractor and validated before use.
 
 Reports can be temporary, in which case the GUI owns their temporary directories until it closes, or permanent, in which case the selected report directory is used. The default report uses embedded Plotly assets and can be opened immediately in the default browser.
 

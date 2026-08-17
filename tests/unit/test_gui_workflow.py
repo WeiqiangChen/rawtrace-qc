@@ -48,8 +48,8 @@ def test_gui_settings_round_trip(tmp_path: Path) -> None:
     config_path = tmp_path / "config.json"
     settings = GuiSettings(
         scope="recursive",
-        min_size_bytes=42,
-        min_age_seconds=12.5,
+        min_size_mb=2,
+        min_age_minutes=12.5,
         patterns=(FilenamePattern("run", r"run_\\d+"),),
         cache_directory=tmp_path / "cache",
         report_directory=tmp_path / "reports",
@@ -64,6 +64,21 @@ def test_gui_settings_round_trip(tmp_path: Path) -> None:
     loaded = load_settings(config_path)
 
     assert loaded == settings
+    assert loaded.discovery_options().min_size_bytes == 2 * 1024 * 1024
+    assert loaded.discovery_options().min_age_seconds == 12.5 * 60
+
+
+def test_gui_settings_loads_legacy_discovery_units(tmp_path: Path) -> None:
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        '{"discovery": {"min_size_bytes": 2097152, "min_age_seconds": 90}}',
+        encoding="utf-8",
+    )
+
+    loaded = load_settings(config_path)
+
+    assert loaded.min_size_mb == 2
+    assert loaded.min_age_minutes == 1.5
 
 
 def test_selection_validates_paths_and_keeps_unique_active_entries(

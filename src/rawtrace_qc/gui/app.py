@@ -823,18 +823,23 @@ def create_window(
             helper_path = qt_widgets.QLineEdit(
                 str(self._settings.thermo.executable_path or "")
             )
-            size_edit = qt_widgets.QLineEdit(str(self._settings.min_size_bytes))
+            size_edit = qt_widgets.QLineEdit(str(int(self._settings.min_size_mb)))
             size_edit.setValidator(
                 qt_gui.QRegularExpressionValidator(
                     qt_core.QRegularExpression("[0-9]*"),
                     size_edit,
                 )
             )
-            age_spin = qt_widgets.QDoubleSpinBox()
-            age_spin.setRange(0, 10**9)
-            age_spin.setValue(self._settings.min_age_seconds)
-            form.addRow("Minimum file size (bytes)", size_edit)
-            form.addRow("Minimum age (seconds)", age_spin)
+            age_edit = qt_widgets.QLineEdit(str(int(self._settings.min_age_minutes)))
+            age_edit.setValidator(
+                qt_gui.QRegularExpressionValidator(
+                    qt_core.QRegularExpression("[0-9]*"),
+                    age_edit,
+                )
+            )
+
+            form.addRow("Minimum file size (MB)", size_edit)
+            form.addRow("Minimum age (minutes)", age_edit)
             form.addRow("Trace cache", _path_editor(cache_edit, dialog, False))
             form.addRow("Permanent reports", _path_editor(report_edit, dialog, False))
             form.addRow("Thermo helper URL", helper_url)
@@ -864,7 +869,7 @@ def create_window(
                     helper_hash,
                     helper_path,
                     size_edit,
-                    age_spin,
+                    age_edit,
                 )
             )
             buttons.rejected.connect(dialog.reject)
@@ -880,7 +885,7 @@ def create_window(
             helper_hash: Any,
             helper_path: Any,
             size_edit: Any,
-            age_spin: Any,
+            age_edit: Any,
         ) -> None:
             nonlocal cache, current_settings
             try:
@@ -889,10 +894,16 @@ def create_window(
                     raise ConfigurationError(
                         "Minimum file size must be a non-negative integer."
                     )
+                age_text = age_edit.text().strip()
+                if not age_text:
+                    raise ConfigurationError(
+                        "Minimum file age must be a non-negative integer."
+                    )
+
                 updated = GuiSettings(
                     scope=self._selected_scope(),
-                    min_size_bytes=int(size_text),
-                    min_age_seconds=age_spin.value(),
+                    min_size_mb=int(size_text),
+                    min_age_minutes=int(age_text),
                     patterns=tuple(self._saved_patterns),
                     cache_directory=Path(cache_edit.text()),
                     report_directory=Path(report_edit.text()),

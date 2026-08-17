@@ -56,8 +56,8 @@ class GuiSettings:
     """Store persisted discovery, cache, report, and helper settings."""
 
     scope: DiscoveryScope = DiscoveryScope.DIRECT
-    min_size_bytes: int = 1024 * 1024
-    min_age_seconds: float = 600
+    min_size_mb: int = 1
+    min_age_minutes: int = 10
     patterns: tuple[FilenamePattern, ...] = ()
     cache_directory: Path = field(
         default_factory=lambda: default_data_directory() / "cache"
@@ -79,8 +79,8 @@ class GuiSettings:
         try:
             DiscoveryOptions(
                 scope=scope,
-                min_size_bytes=self.min_size_bytes,
-                min_age_seconds=self.min_age_seconds,
+                min_size_bytes=self.min_size_mb * 1024 * 1024,
+                min_age_seconds=self.min_age_minutes * 60,
             )
         except (TypeError, ValueError) as error:
             raise ConfigurationError(
@@ -104,8 +104,8 @@ class GuiSettings:
         """Return discovery options represented by this configuration."""
         return DiscoveryOptions(
             scope=self.scope,
-            min_size_bytes=self.min_size_bytes,
-            min_age_seconds=self.min_age_seconds,
+            min_size_bytes=self.min_size_mb * 1024 * 1024,
+            min_age_seconds=self.min_age_minutes * 60,
         )
 
 
@@ -202,10 +202,16 @@ def _settings_from_mapping(payload: Any) -> GuiSettings:
     if not isinstance(thermo_payload, dict):
         raise TypeError("thermo must be an object")
     executable_path = thermo_payload.get("executable_path")
+    min_size_mb = discovery.get("min_size_mb")
+    if min_size_mb is None and "min_size_bytes" in discovery:
+        min_size_mb = int(discovery["min_size_bytes"] / (1024 * 1024))
+    min_age_minutes = discovery.get("min_age_minutes")
+    if min_age_minutes is None and "min_age_seconds" in discovery:
+        min_age_minutes = int(discovery["min_age_seconds"] / 60)
     return GuiSettings(
         scope=discovery.get("scope", DiscoveryScope.DIRECT),
-        min_size_bytes=discovery.get("min_size_bytes", 1024 * 1024),
-        min_age_seconds=discovery.get("min_age_seconds", 600),
+        min_size_mb=1 if min_size_mb is None else min_size_mb,
+        min_age_minutes=10 if min_age_minutes is None else min_age_minutes,
         patterns=patterns,
         cache_directory=Path(
             payload.get("cache_directory", default_data_directory() / "cache")
@@ -228,8 +234,8 @@ def _settings_to_mapping(settings: GuiSettings) -> dict[str, Any]:
     return {
         "cache_directory": str(settings.cache_directory),
         "discovery": {
-            "min_age_seconds": settings.min_age_seconds,
-            "min_size_bytes": settings.min_size_bytes,
+            "min_age_minutes": settings.min_age_minutes,
+            "min_size_mb": settings.min_size_mb,
             "scope": settings.scope.value,
         },
         "patterns": [
