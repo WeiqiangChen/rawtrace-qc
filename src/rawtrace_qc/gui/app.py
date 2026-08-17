@@ -342,6 +342,7 @@ def create_window(
             report_layout.setContentsMargins(18, 14, 18, 14)
             report_layout.addWidget(qt_widgets.QLabel("Report"))
             storage_selector, _, storage_buttons = _mode_selector(
+                qt_core,
                 qt_widgets,
                 report_frame,
                 ("Temporary", "Permanent"),
@@ -358,6 +359,7 @@ def create_window(
             browse_report.clicked.connect(self._choose_report_directory)
             report_layout.addWidget(browse_report)
             precision_selector, _, precision_buttons = _mode_selector(
+                qt_core,
                 qt_widgets,
                 report_frame,
                 ("Low precision", "High precision"),
@@ -578,6 +580,7 @@ def create_window(
 
             def pattern_mode_selector(mode: PatternMode) -> Any:
                 selector, mode_group, mode_buttons = _mode_selector(
+                    qt_core,
                     qt_widgets,
                     dialog,
                     ("Include", "Exclude"),
@@ -991,21 +994,27 @@ def _load_qt() -> tuple[Any, Any, Any]:
 
 
 def _mode_selector(
+    qt_core: Any,
     qt_widgets: Any,
     parent: Any,
     labels: tuple[str, str],
 ) -> tuple[Any, Any, tuple[Any, Any]]:
-    """Build a compact two-option selector from radio buttons."""
+    """Build a compact two-option selector from checkable tool buttons."""
     container = qt_widgets.QWidget(parent)
     container.setObjectName("modeSelector")
     layout = qt_widgets.QHBoxLayout(container)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(0)
     group = qt_widgets.QButtonGroup(container)
-    first = qt_widgets.QRadioButton(labels[0], container)
-    second = qt_widgets.QRadioButton(labels[1], container)
+    group.setExclusive(True)
+    first = qt_widgets.QToolButton(container)
+    second = qt_widgets.QToolButton(container)
+    first.setText(labels[0])
+    second.setText(labels[1])
     for button in (first, second):
         button.setObjectName("modeOption")
+        button.setCheckable(True)
+        button.setToolButtonStyle(qt_core.Qt.ToolButtonStyle.ToolButtonTextOnly)
         layout.addWidget(button)
     group.addButton(first, 0)
     group.addButton(second, 1)
@@ -1095,21 +1104,16 @@ QWidget#modeSelector {
     border: 1px solid #b7cdd0;
     border-radius: 6px;
 }
-QRadioButton#modeOption {
+QToolButton#modeOption {
     background: transparent;
     border: 0;
     color: #063853;
     padding: 7px 10px;
-    spacing: 0;
 }
-QRadioButton#modeOption::indicator {
-    height: 0;
-    width: 0;
-}
-QRadioButton#modeOption:hover {
+QToolButton#modeOption:hover {
     background: #d7ecec;
 }
-QRadioButton#modeOption:checked {
+QToolButton#modeOption:checked {
     background: #40B7B5;
     color: #063853;
 }
