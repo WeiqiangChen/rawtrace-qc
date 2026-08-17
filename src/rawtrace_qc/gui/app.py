@@ -460,20 +460,10 @@ def create_window(
             layout.addWidget(pattern_table)
 
             custom_row = qt_widgets.QHBoxLayout()
-            custom_name = qt_widgets.QLineEdit()
-            custom_name.setPlaceholderText("Custom pattern name")
             custom_expression = qt_widgets.QLineEdit()
             custom_expression.setPlaceholderText("Regular expression")
-            custom_mode_selector, _, custom_mode_buttons = _mode_selector(
-                qt_widgets,
-                dialog,
-                ("Include", "Exclude"),
-            )
-            custom_include, custom_exclude = custom_mode_buttons
             add_pattern = qt_widgets.QPushButton("Add custom pattern")
-            custom_row.addWidget(custom_name)
             custom_row.addWidget(custom_expression, 1)
-            custom_row.addWidget(custom_mode_selector)
             custom_row.addWidget(add_pattern)
             layout.addLayout(custom_row)
 
@@ -511,23 +501,28 @@ def create_window(
                     for row in range(pattern_table.rowCount()):
                         check = pattern_table.cellWidget(row, 0)
                         mode_selector = pattern_table.cellWidget(row, 3)
+                        name_item = pattern_table.item(row, 1)
+                        expression_item = pattern_table.item(row, 2)
                         mode_group = mode_selector.findChild(qt_widgets.QButtonGroup)
-                        if mode_group is None:
+                        if (
+                            name_item is None
+                            or expression_item is None
+                            or mode_group is None
+                        ):
                             raise AttributeError("Pattern mode selector is missing.")
                         mode = (
                             PatternMode.EXCLUDE
                             if mode_group.checkedId() == 1
                             else PatternMode.INCLUDE
                         )
-                        pattern = definitions[row]
+                        pattern = FilenamePattern(
+                            name_item.text(),
+                            expression_item.text(),
+                            mode,
+                        )
+                        definitions[row] = pattern
                         if include_disabled or check.isChecked():
-                            patterns.append(
-                                FilenamePattern(
-                                    pattern.name,
-                                    pattern.expression,
-                                    mode,
-                                )
-                            )
+                            patterns.append(pattern)
                 except (ConfigurationError, AttributeError) as error:
                     self.discovery_status.setText(str(error))
                     return None
@@ -624,15 +619,10 @@ def create_window(
 
             def add_custom_pattern() -> None:
                 try:
-                    mode = (
-                        PatternMode.EXCLUDE
-                        if custom_exclude.isChecked()
-                        else PatternMode.INCLUDE
-                    )
                     pattern = FilenamePattern(
-                        custom_name.text(),
+                        f"Custom {len(self._custom_patterns) + 1}",
                         custom_expression.text(),
-                        mode,
+                        PatternMode.INCLUDE,
                     )
                 except ConfigurationError as error:
                     qt_widgets.QMessageBox.warning(
@@ -642,7 +632,6 @@ def create_window(
                 definitions.append(pattern)
                 self._custom_patterns.append(pattern)
                 self._active_pattern_keys.add(pattern_key(pattern))
-                custom_name.clear()
                 custom_expression.clear()
                 rebuild_pattern_table()
                 refresh_patterns()
@@ -670,6 +659,7 @@ def create_window(
                 )
 
             candidate_list.itemChanged.connect(candidate_item_changed)
+            pattern_table.itemChanged.connect(lambda _item: refresh_patterns())
             select_all.clicked.connect(
                 lambda: self._set_candidate_checks(True, render_candidates)
             )
