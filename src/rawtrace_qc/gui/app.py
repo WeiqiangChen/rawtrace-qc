@@ -317,17 +317,13 @@ def create_window(
             self.selected_list.itemChanged.connect(self._selected_item_changed)
             selected_layout.addWidget(self.selected_list, 1)
             selected_buttons = qt_widgets.QHBoxLayout()
-            add_files = qt_widgets.QPushButton("Add files")
-            add_files.clicked.connect(self._add_files)
-            add_folder = qt_widgets.QPushButton("Add folder")
-            add_folder.clicked.connect(self._add_folder)
             remove = qt_widgets.QPushButton("Remove selected")
             remove.clicked.connect(self._remove_selected)
             select_all = qt_widgets.QPushButton("Select all")
             select_all.clicked.connect(lambda: self._set_all_selected(True))
             select_none = qt_widgets.QPushButton("Select none")
             select_none.clicked.connect(lambda: self._set_all_selected(False))
-            for button in (add_files, add_folder, remove, select_all, select_none):
+            for button in (remove, select_all, select_none):
                 selected_buttons.addWidget(button)
             selected_buttons.addStretch()
             selected_layout.addLayout(selected_buttons)
@@ -753,25 +749,6 @@ def create_window(
             if result.rejected:
                 messages.append(f"Rejected {len(result.rejected)} invalid path(s)")
             self.discovery_status.setText("  /  ".join(messages) or "No paths added")
-
-        def _add_files(self) -> None:
-            paths, _ = qt_widgets.QFileDialog.getOpenFileNames(
-                self,
-                "Add raw files",
-                str(Path.home()),
-                "Thermo raw files (*.raw);;All files (*)",
-            )
-            if paths:
-                self._add_paths(tuple(Path(path) for path in paths))
-
-        def _add_folder(self) -> None:
-            path = qt_widgets.QFileDialog.getExistingDirectory(
-                self,
-                "Add Bruker acquisition folder",
-                str(Path.home()),
-            )
-            if path:
-                self._add_paths((Path(path),))
 
         def _remove_selected(self) -> None:
             paths = tuple(
