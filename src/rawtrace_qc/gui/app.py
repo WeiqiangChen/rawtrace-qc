@@ -351,14 +351,6 @@ def create_window(
             browse_report = qt_widgets.QPushButton("Browse")
             browse_report.clicked.connect(self._choose_report_directory)
             report_layout.addWidget(browse_report)
-            precision_selector, _, precision_buttons = _mode_selector(
-                qt_core,
-                qt_widgets,
-                report_frame,
-                ("Low precision", "High precision"),
-            )
-            self.low_precision, self.high_precision = precision_buttons
-            report_layout.addWidget(precision_selector)
             self.generate_button = qt_widgets.QPushButton("Generate report")
             self.generate_button.setObjectName("primary")
             self.generate_button.clicked.connect(self._generate)
@@ -792,9 +784,7 @@ def create_window(
                 options = ReportGenerationOptions(
                     storage_mode=storage_mode,
                     output_directory=output_directory,
-                    precision_mode=(
-                        "high" if self.high_precision.isChecked() else "low"
-                    ),
+                    precision_mode="low",
                 )
             except (ConfigurationError, ValueError) as error:
                 self.discovery_status.setText(str(error))
