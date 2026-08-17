@@ -56,11 +56,22 @@ def create_window(
 
         paths_dropped = qt_core.Signal(object)
 
+        def __init__(self) -> None:
+            super().__init__()
+            self.setAcceptDrops(True)
+            self.setDragDropMode(qt_widgets.QAbstractItemView.DragDropMode.DropOnly)
+
         def dragEnterEvent(self, event: Any) -> None:
             if event.mimeData().hasUrls():
                 event.acceptProposedAction()
                 return
             super().dragEnterEvent(event)
+
+        def dragMoveEvent(self, event: Any) -> None:
+            if event.mimeData().hasUrls():
+                event.acceptProposedAction()
+                return
+            super().dragMoveEvent(event)
 
         def dropEvent(self, event: Any) -> None:
             paths = tuple(
@@ -73,6 +84,102 @@ def create_window(
                 event.acceptProposedAction()
                 return
             super().dropEvent(event)
+
+    class FileItemDelegate(qt_widgets.QStyledItemDelegate):
+        """Paint and toggle explicit checkboxes for file list items."""
+
+        @staticmethod
+        def _checkbox_rect(option: Any) -> Any:
+            """Geometry of the drawn checkbox glyph itself."""
+            return qt_core.QRect(
+                option.rect.left() + 4,
+                option.rect.center().y() - 7,
+                14,
+                14,
+            )
+
+        @staticmethod
+        def _checkbox_field_rect(option: Any) -> Any:
+            """Clickable area: the whole reserved left column, not just the glyph."""
+            return qt_core.QRect(
+                option.rect.left(),
+                option.rect.top(),
+                24,
+                option.rect.height(),
+            )
+
+        def initStyleOption(self, option: Any, index: Any) -> None:
+            super().initStyleOption(option, index)
+            if index.flags() & qt_core.Qt.ItemFlag.ItemIsUserCheckable:
+                option.features &= (
+                    ~qt_widgets.QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
+                )
+
+        def paint(
+            self,
+            painter: Any,
+            option: Any,
+            index: Any,
+        ) -> None:
+            if not index.flags() & qt_core.Qt.ItemFlag.ItemIsUserCheckable:
+                super().paint(painter, option, index)
+                return
+            display_option = qt_widgets.QStyleOptionViewItem(option)
+            display_option.rect.adjust(24, 0, 0, 0)
+            if option.state & qt_widgets.QStyle.StateFlag.State_Selected:
+                painter.fillRect(
+                    self._checkbox_field_rect(option), option.palette.highlight()
+                )
+            super().paint(painter, display_option, index)
+            rect = self._checkbox_rect(option)
+            painter.save()
+            painter.setRenderHint(qt_gui.QPainter.RenderHint.Antialiasing)
+            painter.setPen(qt_gui.QPen(qt_gui.QColor("#063853"), 1.2))
+            painter.setBrush(qt_gui.QBrush(qt_gui.QColor("#ffffff")))
+            painter.drawRoundedRect(rect, 3, 3)
+            if index.data(qt_core.Qt.ItemDataRole.CheckStateRole) == (
+                qt_core.Qt.CheckState.Checked.value
+            ):
+                painter.setPen(qt_gui.QPen(qt_gui.QColor("#40B7B5"), 2))
+                painter.drawLine(
+                    qt_core.QPoint(rect.left() + 4, rect.center().y()),
+                    qt_core.QPoint(rect.center().x() - 1, rect.bottom() - 4),
+                )
+                painter.drawLine(
+                    qt_core.QPoint(rect.center().x() - 1, rect.bottom() - 4),
+                    qt_core.QPoint(rect.right() - 3, rect.top() + 4),
+                )
+            painter.restore()
+
+        def editorEvent(
+            self,
+            event: Any,
+            model: Any,
+            option: Any,
+            index: Any,
+        ) -> bool:
+            if (
+                event.type() == qt_core.QEvent.Type.MouseButtonRelease
+                and event.button() == qt_core.Qt.MouseButton.LeftButton
+                and index.flags() & qt_core.Qt.ItemFlag.ItemIsUserCheckable
+                and self._checkbox_field_rect(option).contains(
+                    event.position().toPoint()
+                )
+            ):
+                checked = index.data(qt_core.Qt.ItemDataRole.CheckStateRole) == (
+                    qt_core.Qt.CheckState.Checked.value
+                )
+                model.setData(
+                    index,
+                    (
+                        qt_core.Qt.CheckState.Unchecked.value
+                        if checked
+                        else qt_core.Qt.CheckState.Checked.value
+                    ),
+                    qt_core.Qt.ItemDataRole.CheckStateRole,
+                )
+                return True
+            return super().editorEvent(event, model, option, index)
 
     class WorkerSignals(qt_core.QObject):
         """Carry background report results back to the GUI thread."""
@@ -201,6 +308,13 @@ def create_window(
             selected_heading.addStretch()
             selected_layout.addLayout(selected_heading)
             self.selected_list = DropList()
+            self.selected_list._file_item_delegate = FileItemDelegate(
+                self.selected_list
+            )
+            self.selected_list.setItemDelegate(self.selected_list._file_item_delegate)
+            self.selected_list.setSelectionMode(
+                qt_widgets.QAbstractItemView.SelectionMode.ExtendedSelection
+            )
             self.selected_list.setToolTip("Drop valid .raw files or .d folders here")
             self.selected_list.paths_dropped.connect(self._add_paths)
             self.selected_list.itemChanged.connect(self._selected_item_changed)
@@ -364,17 +478,21 @@ def create_window(
             layout.addLayout(custom_row)
 
             candidate_list = qt_widgets.QListWidget()
+            candidate_list._file_item_delegate = FileItemDelegate(candidate_list)
+            candidate_list.setItemDelegate(candidate_list._file_item_delegate)
             candidate_list.setSelectionMode(
                 qt_widgets.QAbstractItemView.SelectionMode.ExtendedSelection
             )
             layout.addWidget(candidate_list, 1)
             candidate_buttons = qt_widgets.QHBoxLayout()
-            select_active = qt_widgets.QPushButton("Select active")
+            select_all = qt_widgets.QPushButton("Select all")
+            select_marked = qt_widgets.QPushButton("Select marked")
             select_none = qt_widgets.QPushButton("Select none")
             add_candidates = qt_widgets.QPushButton("Add selected to report")
             add_candidates.setObjectName("primary")
             close = qt_widgets.QPushButton("Close")
-            candidate_buttons.addWidget(select_active)
+            candidate_buttons.addWidget(select_all)
+            candidate_buttons.addWidget(select_marked)
             candidate_buttons.addWidget(select_none)
             candidate_buttons.addStretch()
             candidate_buttons.addWidget(add_candidates)
@@ -415,41 +533,44 @@ def create_window(
                     return None
                 return tuple(patterns)
 
+            def update_candidate_count() -> None:
+                included = sum(entry.included for entry in self._selection.candidates)
+                candidate_count.setText(
+                    f"{included} active / {len(self._selection.candidates)} total"
+                )
+
             def render_candidates() -> None:
+                selected_paths = {
+                    str(item.data(qt_core.Qt.ItemDataRole.UserRole))
+                    for item in candidate_list.selectedItems()
+                }
                 self._rendering_candidates = True
                 candidate_list.clear()
-                included = 0
                 for entry in self._selection.candidates:
                     item = qt_widgets.QListWidgetItem(entry.candidate.path.name)
+                    path_text = str(entry.candidate.path)
                     item.setToolTip(str(entry.candidate.path))
                     item.setData(
                         qt_core.Qt.ItemDataRole.UserRole,
-                        str(entry.candidate.path),
+                        path_text,
                     )
-                    flags = (
-                        qt_core.Qt.ItemFlag.ItemIsEnabled
-                        | qt_core.Qt.ItemFlag.ItemIsSelectable
-                        | qt_core.Qt.ItemFlag.ItemIsUserCheckable
-                    )
-                    item.setFlags(flags)
                     if entry.included:
-                        included += 1
+                        item.setFlags(
+                            qt_core.Qt.ItemFlag.ItemIsEnabled
+                            | qt_core.Qt.ItemFlag.ItemIsSelectable
+                            | qt_core.Qt.ItemFlag.ItemIsUserCheckable
+                        )
                         item.setCheckState(
                             qt_core.Qt.CheckState.Checked
                             if entry.active
                             else qt_core.Qt.CheckState.Unchecked
                         )
                     else:
-                        item.setCheckState(qt_core.Qt.CheckState.Unchecked)
+                        item.setFlags(qt_core.Qt.ItemFlag.ItemIsEnabled)
                         item.setForeground(qt_gui.QBrush(qt_gui.QColor("#84909a")))
-                        item.setFlags(
-                            qt_core.Qt.ItemFlag.ItemIsSelectable
-                            | qt_core.Qt.ItemFlag.ItemIsEnabled
-                        )
                     candidate_list.addItem(item)
-                candidate_count.setText(
-                    f"{included} active / {len(self._selection.candidates)} total"
-                )
+                    item.setSelected(path_text in selected_paths)
+                update_candidate_count()
                 self._rendering_candidates = False
 
             def refresh_patterns() -> None:
@@ -499,7 +620,7 @@ def create_window(
                     path,
                     item.checkState() == qt_core.Qt.CheckState.Checked,
                 )
-                render_candidates()
+                update_candidate_count()
 
             def add_custom_pattern() -> None:
                 try:
@@ -549,8 +670,11 @@ def create_window(
                 )
 
             candidate_list.itemChanged.connect(candidate_item_changed)
-            select_active.clicked.connect(
+            select_all.clicked.connect(
                 lambda: self._set_candidate_checks(True, render_candidates)
+            )
+            select_marked.clicked.connect(
+                lambda: self._set_marked_candidate_checks(candidate_list, True)
             )
             select_none.clicked.connect(
                 lambda: self._set_candidate_checks(False, render_candidates)
@@ -569,15 +693,34 @@ def create_window(
                     self._selection.set_candidate_active(entry.candidate.path, active)
             render()
 
+        def _set_marked_candidate_checks(
+            self,
+            candidate_list: Any,
+            active: bool,
+        ) -> None:
+            """Set checked state for the currently mouse-marked candidates."""
+            for item in candidate_list.selectedItems():
+                if item.flags() & qt_core.Qt.ItemFlag.ItemIsUserCheckable:
+                    item.setCheckState(
+                        qt_core.Qt.CheckState.Checked
+                        if active
+                        else qt_core.Qt.CheckState.Unchecked
+                    )
+
         def _refresh_selected(self) -> None:
+            selected_paths = {
+                str(item.data(qt_core.Qt.ItemDataRole.UserRole))
+                for item in self.selected_list.selectedItems()
+            }
             self._rendering_selected = True
             self.selected_list.clear()
             for entry in self._selection.selected:
                 item = qt_widgets.QListWidgetItem(entry.candidate.path.name)
+                path_text = str(entry.candidate.path)
                 item.setToolTip(str(entry.candidate.path))
                 item.setData(
                     qt_core.Qt.ItemDataRole.UserRole,
-                    str(entry.candidate.path),
+                    path_text,
                 )
                 item.setFlags(
                     qt_core.Qt.ItemFlag.ItemIsEnabled
@@ -590,10 +733,8 @@ def create_window(
                     else qt_core.Qt.CheckState.Unchecked
                 )
                 self.selected_list.addItem(item)
-            active_count = len(self._selection.active_selected())
-            self.selected_count.setText(
-                f"{active_count} active / {len(self._selection.selected)} files"
-            )
+                item.setSelected(path_text in selected_paths)
+            self._update_selected_count()
             self._rendering_selected = False
 
         def _selected_item_changed(self, item: Any) -> None:
@@ -604,7 +745,14 @@ def create_window(
                 path,
                 item.checkState() == qt_core.Qt.CheckState.Checked,
             )
-            self._refresh_selected()
+            self._update_selected_count()
+
+        def _update_selected_count(self) -> None:
+            """Refresh the active and total counts beside the selected-file list."""
+            active_count = len(self._selection.active_selected())
+            self.selected_count.setText(
+                f"{active_count} active / {len(self._selection.selected)} files"
+            )
 
         def _add_paths(self, paths: tuple[Path, ...]) -> None:
             result = self._selection.add_paths(paths)
