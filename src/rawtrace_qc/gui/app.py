@@ -273,9 +273,6 @@ def create_window(
             choose_source = qt_widgets.QPushButton("Choose folder")
             choose_source.clicked.connect(self._choose_source)
             self.include_subfolders = qt_widgets.QCheckBox("Include subfolders")
-            self.include_subfolders.setChecked(
-                self._settings.scope is DiscoveryScope.RECURSIVE
-            )
             self.include_subfolders.setToolTip(
                 "Search folders below the selected folder"
             )
