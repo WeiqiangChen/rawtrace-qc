@@ -12,7 +12,12 @@ from typing import Any
 from rawtrace_qc.discovery import DiscoveryScope
 from rawtrace_qc.errors import ConfigurationError, DiscoveryError
 from rawtrace_qc.gui.cache import TraceCache
-from rawtrace_qc.gui.config import GuiSettings, load_settings, save_settings
+from rawtrace_qc.gui.config import (
+    GuiSettings,
+    default_data_directory,
+    load_settings,
+    save_settings,
+)
 from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode
 from rawtrace_qc.gui.reporting import (
     ReportGenerationOptions,
@@ -273,6 +278,9 @@ def create_window(
             choose_source = qt_widgets.QPushButton("Choose folder")
             choose_source.clicked.connect(self._choose_source)
             self.include_subfolders = qt_widgets.QCheckBox("Include subfolders")
+            self.include_subfolders.setChecked(
+                self._settings.scope is DiscoveryScope.RECURSIVE
+            )
             self.include_subfolders.setToolTip(
                 "Search folders below the selected folder"
             )
@@ -364,7 +372,7 @@ def create_window(
             path = qt_widgets.QFileDialog.getExistingDirectory(
                 self,
                 "Choose discovery folder",
-                self.source_edit.text() or str(Path.home()),
+                _dialog_start_directory(self.source_edit.text()),
             )
             if path:
                 self.source_edit.setText(path)
@@ -762,7 +770,7 @@ def create_window(
             path = qt_widgets.QFileDialog.getExistingDirectory(
                 self,
                 "Choose permanent report directory",
-                self.report_directory_edit.text() or str(Path.home()),
+                _dialog_start_directory(self.report_directory_edit.text()),
             )
             if path:
                 self.report_directory_edit.setText(path)
@@ -830,10 +838,10 @@ def create_window(
                     size_edit,
                 )
             )
-            age_edit = qt_widgets.QLineEdit(str(int(self._settings.min_age_minutes)))
+            age_edit = qt_widgets.QLineEdit(str(self._settings.min_age_minutes))
             age_edit.setValidator(
                 qt_gui.QRegularExpressionValidator(
-                    qt_core.QRegularExpression("[0-9]*"),
+                    qt_core.QRegularExpression("[0-9]*(\\.[0-9]*)?"),
                     age_edit,
                 )
             )
@@ -856,13 +864,28 @@ def create_window(
             note.setWordWrap(True)
             note.setObjectName("muted")
             layout.addWidget(note)
-            buttons = qt_widgets.QDialogButtonBox(
-                qt_widgets.QDialogButtonBox.StandardButton.Save
-                | qt_widgets.QDialogButtonBox.StandardButton.Cancel
-            )
-            buttons.accepted.connect(
-                lambda: self._save_settings_dialog(
+            button_row = qt_widgets.QHBoxLayout()
+            reset_button = qt_widgets.QPushButton("Reset defaults")
+            apply_button = qt_widgets.QPushButton("Apply")
+            apply_save_button = qt_widgets.QPushButton("Apply and save")
+            apply_save_button.setObjectName("primary")
+            cancel_button = qt_widgets.QPushButton("Cancel")
+
+            def apply_settings(persist: bool) -> None:
+                self._apply_settings_dialog(
                     dialog,
+                    cache_edit,
+                    report_edit,
+                    helper_url,
+                    helper_hash,
+                    helper_path,
+                    size_edit,
+                    age_edit,
+                    persist=persist,
+                )
+
+            reset_button.clicked.connect(
+                lambda: self._reset_settings_dialog(
                     cache_edit,
                     report_edit,
                     helper_url,
@@ -872,11 +895,18 @@ def create_window(
                     age_edit,
                 )
             )
-            buttons.rejected.connect(dialog.reject)
-            layout.addWidget(buttons)
+            apply_button.clicked.connect(lambda: apply_settings(False))
+            apply_save_button.clicked.connect(lambda: apply_settings(True))
+            cancel_button.clicked.connect(dialog.reject)
+            button_row.addWidget(reset_button)
+            button_row.addStretch()
+            button_row.addWidget(apply_save_button)
+            button_row.addWidget(apply_button)
+            button_row.addWidget(cancel_button)
+            layout.addLayout(button_row)
             dialog.exec()
 
-        def _save_settings_dialog(
+        def _apply_settings_dialog(
             self,
             dialog: Any,
             cache_edit: Any,
@@ -886,6 +916,7 @@ def create_window(
             helper_path: Any,
             size_edit: Any,
             age_edit: Any,
+            persist: bool,
         ) -> None:
             nonlocal cache, current_settings
             try:
@@ -903,7 +934,7 @@ def create_window(
                 updated = GuiSettings(
                     scope=self._selected_scope(),
                     min_size_mb=int(size_text),
-                    min_age_minutes=int(age_text),
+                    min_age_minutes=float(age_text),
                     patterns=tuple(self._saved_patterns),
                     cache_directory=Path(cache_edit.text()),
                     report_directory=Path(report_edit.text()),
@@ -913,7 +944,8 @@ def create_window(
                         helper_path.text(),
                     ),
                 )
-                save_settings(updated, settings_path)
+                if persist:
+                    save_settings(updated, settings_path)
             except (ConfigurationError, OSError, ValueError) as error:
                 qt_widgets.QMessageBox.critical(dialog, "Invalid settings", str(error))
                 return
@@ -922,7 +954,27 @@ def create_window(
             self._selection.options = updated.discovery_options()
             cache = TraceCache(updated.cache_directory)
             self._cache = cache
+            self.report_directory_edit.setText(str(updated.report_directory))
             dialog.accept()
+
+        def _reset_settings_dialog(
+            self,
+            cache_edit: Any,
+            report_edit: Any,
+            helper_url: Any,
+            helper_hash: Any,
+            helper_path: Any,
+            size_edit: Any,
+            age_edit: Any,
+        ) -> None:
+            defaults = GuiSettings()
+            cache_edit.setText(str(defaults.cache_directory))
+            report_edit.setText(str(defaults.report_directory))
+            helper_url.clear()
+            helper_hash.clear()
+            helper_path.clear()
+            size_edit.setText(str(defaults.min_size_mb))
+            age_edit.setText(str(defaults.min_age_minutes))
 
         def closeEvent(self, event: Any) -> None:
             if self._worker is not None:
@@ -934,16 +986,6 @@ def create_window(
                 )
                 event.ignore()
                 return
-            try:
-                self._settings = replace(
-                    self._settings,
-                    scope=self._selected_scope(),
-                )
-                save_settings(self._settings, settings_path)
-            except ConfigurationError as error:
-                qt_widgets.QMessageBox.warning(
-                    self, "Could not save settings", str(error)
-                )
             self._workspace.cleanup()
             event.accept()
 
@@ -1006,13 +1048,14 @@ def _path_editor(line_edit: Any, dialog: Any, file_mode: bool) -> Any:
     button = qt_widgets.QPushButton("Browse")
 
     def browse() -> None:
+        start_directory = _dialog_start_directory(line_edit.text())
         if file_mode:
             path, _ = qt_widgets.QFileDialog.getOpenFileName(
-                dialog, "Choose executable"
+                dialog, "Choose executable", start_directory
             )
         else:
             path = qt_widgets.QFileDialog.getExistingDirectory(
-                dialog, "Choose directory"
+                dialog, "Choose directory", start_directory
             )
         if path:
             line_edit.setText(path)
@@ -1021,6 +1064,18 @@ def _path_editor(line_edit: Any, dialog: Any, file_mode: bool) -> Any:
     layout.addWidget(line_edit, 1)
     layout.addWidget(button)
     return container
+
+
+def _dialog_start_directory(path_text: str) -> str:
+    """Return an existing selected path or the application data directory."""
+    selected_text = path_text.strip()
+    if selected_text:
+        selected_path = Path(selected_text).expanduser()
+        if selected_path.exists():
+            return str(
+                selected_path if selected_path.is_dir() else selected_path.parent
+            )
+    return str(default_data_directory())
 
 
 def _thermo_settings(url: str, checksum: str, executable: str) -> Any:

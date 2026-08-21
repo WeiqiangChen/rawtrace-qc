@@ -3,14 +3,18 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from platformdirs import user_data_dir
+
 from rawtrace_qc.discovery import DiscoveryOptions, DiscoveryScope
 from rawtrace_qc.errors import ConfigurationError
 from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode
+
+_APP_NAME = "rawtrace-qc"
+_APP_AUTHOR = "perutzms"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,13 +61,13 @@ class GuiSettings:
 
     scope: DiscoveryScope = DiscoveryScope.DIRECT
     min_size_mb: int = 1
-    min_age_minutes: int = 10
+    min_age_minutes: float = 10
     patterns: tuple[FilenamePattern, ...] = ()
     cache_directory: Path = field(
-        default_factory=lambda: default_data_directory() / "cache"
+        default_factory=lambda: default_data_directory() / "traces"
     )
     report_directory: Path = field(
-        default_factory=lambda: Path.home() / "rawtrace-qc-reports"
+        default_factory=lambda: default_data_directory() / "reports"
     )
     thermo: ThermoToolSettings = field(default_factory=ThermoToolSettings)
 
@@ -110,21 +114,19 @@ class GuiSettings:
 
 
 def default_data_directory() -> Path:
-    """Return the platform-appropriate per-user rawtrace-qc data directory."""
-    if os.name == "nt":
-        root = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
-    else:
-        root = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return root / "rawtrace-qc"
+    """Return the platformdirs-selected per-user rawtrace-qc data directory."""
+    return Path(
+        user_data_dir(
+            appname=_APP_NAME,
+            appauthor=_APP_AUTHOR,
+            roaming=False,
+        )
+    )
 
 
 def default_config_path() -> Path:
-    """Return the platform-appropriate GUI configuration path."""
-    if os.name == "nt":
-        root = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-    else:
-        root = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    return root / "rawtrace-qc" / "config.json"
+    """Return the GUI configuration path inside the application data directory."""
+    return default_data_directory() / "config.json"
 
 
 def load_settings(path: Path | None = None) -> GuiSettings:
@@ -207,17 +209,17 @@ def _settings_from_mapping(payload: Any) -> GuiSettings:
         min_size_mb = int(discovery["min_size_bytes"] / (1024 * 1024))
     min_age_minutes = discovery.get("min_age_minutes")
     if min_age_minutes is None and "min_age_seconds" in discovery:
-        min_age_minutes = int(discovery["min_age_seconds"] / 60)
+        min_age_minutes = discovery["min_age_seconds"] / 60
     return GuiSettings(
         scope=discovery.get("scope", DiscoveryScope.DIRECT),
         min_size_mb=1 if min_size_mb is None else min_size_mb,
         min_age_minutes=10 if min_age_minutes is None else min_age_minutes,
         patterns=patterns,
         cache_directory=Path(
-            payload.get("cache_directory", default_data_directory() / "cache")
+            payload.get("cache_directory", default_data_directory() / "traces")
         ),
         report_directory=Path(
-            payload.get("report_directory", Path.home() / "rawtrace-qc-reports")
+            payload.get("report_directory", default_data_directory() / "reports")
         ),
         thermo=ThermoToolSettings(
             download_url=thermo_payload.get("download_url"),

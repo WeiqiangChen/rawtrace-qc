@@ -7,7 +7,14 @@ from pathlib import Path
 import pytest
 from rawtrace_qc.discovery import DiscoveryCandidate, DiscoveryOptions, FileFormat, Vendor
 from rawtrace_qc.errors import ConfigurationError
-from rawtrace_qc.gui.config import GuiSettings, ThermoToolSettings, load_settings, save_settings
+from rawtrace_qc.gui.config import (
+    GuiSettings,
+    ThermoToolSettings,
+    default_config_path,
+    default_data_directory,
+    load_settings,
+    save_settings,
+)
 from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode, filter_candidates
 from rawtrace_qc.gui.workflow import RawFileSelection
 
@@ -79,6 +86,40 @@ def test_gui_settings_loads_legacy_discovery_units(tmp_path: Path) -> None:
 
     assert loaded.min_size_mb == 2
     assert loaded.min_age_minutes == 1.5
+
+
+def test_gui_defaults_use_platformdirs_appdata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    appdata = tmp_path / "appdata"
+    monkeypatch.setattr(
+        "rawtrace_qc.gui.config.user_data_dir",
+        lambda **_kwargs: str(appdata),
+    )
+
+    settings = GuiSettings()
+
+    assert default_data_directory() == appdata
+    assert default_config_path() == appdata / "config.json"
+    assert settings.cache_directory == appdata / "traces"
+    assert settings.report_directory == appdata / "reports"
+
+
+def test_save_settings_creates_the_default_appdata_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    appdata = tmp_path / "appdata"
+    monkeypatch.setattr(
+        "rawtrace_qc.gui.config.user_data_dir",
+        lambda **_kwargs: str(appdata),
+    )
+
+    saved_path = save_settings(GuiSettings())
+
+    assert saved_path == appdata / "config.json"
+    assert saved_path.is_file()
 
 
 def test_selection_validates_paths_and_keeps_unique_active_entries(
