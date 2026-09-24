@@ -123,7 +123,9 @@ class TestSettingsDialog:
             nonlocal dialog
             try:
                 dialog = next(
-                    widget for widget in qt_application.topLevelWidgets() if isinstance(widget, qt_widgets.QDialog)
+                    widget
+                    for widget in qt_application.topLevelWidgets()
+                    if isinstance(widget, qt_widgets.QDialog) and widget.isVisible()
                 )
                 buttons = {button.text(): button for button in dialog.findChildren(qt_widgets.QPushButton)}
                 assert {
@@ -176,7 +178,9 @@ class TestSettingsDialog:
             nonlocal dialog
             try:
                 dialog = next(
-                    widget for widget in qt_application.topLevelWidgets() if isinstance(widget, qt_widgets.QDialog)
+                    widget
+                    for widget in qt_application.topLevelWidgets()
+                    if isinstance(widget, qt_widgets.QDialog) and widget.isVisible()
                 )
                 buttons = {button.text(): button for button in dialog.findChildren(qt_widgets.QPushButton)}
                 cache_edit = next(
