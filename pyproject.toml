@@ -37,6 +37,10 @@ dev = [
 [tool.pytest.ini_options]
 addopts = ["--strict-config", "--strict-markers"]
 testpaths = ["tests"]
+markers = [
+    "network: tests that require network access",
+    "integration: tests requiring a real ThermoScanHeaderExtractor install on Windows",
+]
 
 [tool.coverage.run]
 branch = true

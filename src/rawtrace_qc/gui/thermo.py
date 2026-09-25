@@ -6,12 +6,13 @@ import hashlib
 import shutil
 from pathlib import Path
 from urllib.error import URLError
-from urllib.parse import urlparse
 from urllib.request import urlopen
+from zipfile import BadZipFile, ZipFile
 
 from rawtrace_qc.errors import ConfigurationError
 from rawtrace_qc.gui.config import ThermoToolSettings
 from rawtrace_qc.paths import helper_tool_directory
+from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 
 
 class ThermoToolManager:
@@ -21,15 +22,12 @@ class ThermoToolManager:
         self,
         settings: ThermoToolSettings,
         install_directory: Path | None = None,
-        release_version: str = "0.1.0",
     ) -> None:
         """Create a manager using helper settings and an optional install root.
 
         Args:
             settings: Thermo helper download and executable settings.
             install_directory: Explicit install directory. Defaults to None.
-            release_version: Helper release version used to isolate the
-                default install directory. Defaults to `"0.1.0"`.
         """
         self.settings = settings
         self.install_directory = (
@@ -38,7 +36,7 @@ class ThermoToolManager:
                 if install_directory is not None
                 else helper_tool_directory(
                     "thermoscanheaderextractor",
-                    release_version,
+                    THERMO_HELPER_SPECIFICATION.version,
                 )
             )
             .expanduser()
@@ -52,41 +50,60 @@ class ThermoToolManager:
             A usable executable path.
 
         Raises:
-            ConfigurationError: If no helper is configured, the download URL
-                is invalid, downloading fails, or the checksum is wrong.
+            ConfigurationError: If the pinned archive cannot be downloaded,
+                verified, or unpacked.
         """
         existing = self._existing_path()
         if existing is not None:
             return existing
-        if self.settings.download_url is None:
-            raise ConfigurationError(
-                "Thermo extraction requires ThermScanHeaderExtractor. Configure "
-                "thermo.download_url and optionally thermo.sha256, or set "
-                "thermo.executable_path in the GUI settings."
-            )
-        parsed = urlparse(self.settings.download_url)
-        if parsed.scheme not in {"http", "https"}:
-            raise ConfigurationError(
-                "Thermo helper download_url must use http or https; got "
-                f"{self.settings.download_url!r}."
-            )
-
         self.install_directory.mkdir(parents=True, exist_ok=True)
-        destination = self.install_directory / self.settings.executable_name
-        temporary = destination.with_suffix(destination.suffix + ".download")
+        destination = (
+            self.install_directory / THERMO_HELPER_SPECIFICATION.executable_name
+        )
+        archive_temporary = self.install_directory / (
+            THERMO_HELPER_SPECIFICATION.asset_name + ".download"
+        )
+        executable_temporary = destination.with_suffix(destination.suffix + ".download")
         try:
-            with urlopen(self.settings.download_url, timeout=60) as response:
-                with temporary.open("wb") as output:
+            with urlopen(
+                THERMO_HELPER_SPECIFICATION.download_url, timeout=60
+            ) as response:
+                with archive_temporary.open("wb") as output:
                     shutil.copyfileobj(response, output)
-            self._verify_checksum(temporary)
-            temporary.replace(destination)
+            self._verify_checksum(archive_temporary)
+            try:
+                with ZipFile(archive_temporary) as archive:
+                    member_name = next(
+                        (
+                            name
+                            for name in archive.namelist()
+                            if Path(name).name
+                            == THERMO_HELPER_SPECIFICATION.executable_name
+                        ),
+                        None,
+                    )
+                    if member_name is None:
+                        raise ConfigurationError(
+                            "Pinned Thermo helper archive does not contain "
+                            f"{THERMO_HELPER_SPECIFICATION.executable_name!r}."
+                        )
+                    with archive.open(member_name) as source:
+                        with executable_temporary.open("wb") as output:
+                            shutil.copyfileobj(source, output)
+            except BadZipFile as error:
+                raise ConfigurationError(
+                    "Pinned Thermo helper download is not a valid ZIP archive."
+                ) from error
+            executable_temporary.replace(destination)
         except (OSError, URLError) as error:
             raise ConfigurationError(
-                f"Could not download ThermScanHeaderExtractor from "
-                f"{self.settings.download_url!r}: {error}."
+                f"Could not install pinned ThermScanHeaderExtractor "
+                f"v{THERMO_HELPER_SPECIFICATION.version} from "
+                f"{THERMO_HELPER_SPECIFICATION.download_url!r}: {error}."
             ) from error
         finally:
-            temporary.unlink(missing_ok=True)
+            archive_temporary.unlink(missing_ok=True)
+            executable_temporary.unlink(missing_ok=True)
         return destination
 
     def _existing_path(self) -> Path | None:
@@ -95,19 +112,17 @@ class ThermoToolManager:
             resolved = configured.expanduser().resolve()
             if resolved.is_file():
                 return resolved
-        installed = self.install_directory / self.settings.executable_name
+        installed = self.install_directory / THERMO_HELPER_SPECIFICATION.executable_name
         return installed if installed.is_file() else None
 
     def _verify_checksum(self, path: Path) -> None:
-        expected = self.settings.sha256
-        if expected is None:
-            return
         digest = hashlib.sha256()
         with path.open("rb") as source:
             for chunk in iter(lambda: source.read(1024 * 1024), b""):
                 digest.update(chunk)
+        expected = THERMO_HELPER_SPECIFICATION.sha256
         if digest.hexdigest().casefold() != expected.casefold():
             raise ConfigurationError(
-                "Downloaded ThermScanHeaderExtractor failed SHA-256 verification; "
-                f"expected {expected!r}."
+                "Downloaded ThermScanHeaderExtractor archive failed SHA-256 "
+                f"verification; expected {expected!r}."
             )

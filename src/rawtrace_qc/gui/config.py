@@ -15,38 +15,12 @@ from rawtrace_qc.paths import default_data_directory
 
 @dataclass(frozen=True, slots=True)
 class ThermoToolSettings:
-    """Configure the optional ThermScanHeaderExtractor installation."""
+    """Configure an optional local ThermScanHeaderExtractor executable."""
 
-    download_url: str | None = None
-    sha256: str | None = None
     executable_path: Path | None = None
-    executable_name: str = "ThermScanHeaderExtractor.exe"
 
     def __post_init__(self) -> None:
-        """Validate helper download and executable settings."""
-        if self.download_url is not None and (
-            not isinstance(self.download_url, str) or not self.download_url.strip()
-        ):
-            raise ConfigurationError(
-                "Thermo helper download_url must be None or a non-empty URL."
-            )
-        if self.sha256 is not None:
-            if not isinstance(self.sha256, str) or len(self.sha256) != 64:
-                raise ConfigurationError(
-                    "Thermo helper sha256 must be a 64-character hexadecimal digest."
-                )
-            try:
-                int(self.sha256, 16)
-            except ValueError as error:
-                raise ConfigurationError(
-                    f"Thermo helper sha256 must be hexadecimal; got {self.sha256!r}."
-                ) from error
-        if not isinstance(self.executable_name, str) or not (
-            self.executable_name.strip()
-        ):
-            raise ConfigurationError(
-                "Thermo helper executable_name must be a non-empty string."
-            )
+        """Normalize the optional executable path."""
         if self.executable_path is not None:
             object.__setattr__(self, "executable_path", Path(self.executable_path))
 
@@ -207,12 +181,7 @@ def _settings_from_mapping(payload: Any) -> GuiSettings:
             payload.get("report_directory", default_data_directory() / "reports")
         ),
         thermo=ThermoToolSettings(
-            download_url=thermo_payload.get("download_url"),
-            sha256=thermo_payload.get("sha256"),
             executable_path=Path(executable_path) if executable_path else None,
-            executable_name=thermo_payload.get(
-                "executable_name", "ThermScanHeaderExtractor.exe"
-            ),
         ),
     )
 
@@ -235,13 +204,10 @@ def _settings_to_mapping(settings: GuiSettings) -> dict[str, Any]:
         ],
         "report_directory": str(settings.report_directory),
         "thermo": {
-            "download_url": settings.thermo.download_url,
-            "executable_name": settings.thermo.executable_name,
             "executable_path": (
                 None
                 if settings.thermo.executable_path is None
                 else str(settings.thermo.executable_path)
             ),
-            "sha256": settings.thermo.sha256,
         },
     }

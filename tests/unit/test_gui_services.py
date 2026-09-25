@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 from rawtrace_qc.discovery import DiscoveryCandidate, FileFormat, Vendor
@@ -12,13 +14,10 @@ from rawtrace_qc.errors import ConfigurationError
 from rawtrace_qc.extractors import BrukerExtractor
 from rawtrace_qc.gui.cache import TraceCache
 from rawtrace_qc.gui.config import ThermoToolSettings
-from rawtrace_qc.gui.reporting import (
-    ReportGenerationOptions,
-    ReportStorageMode,
-    generate_report,
-)
+from rawtrace_qc.gui.reporting import ReportGenerationOptions, ReportStorageMode, generate_report
 from rawtrace_qc.gui.thermo import ThermoToolManager
 from rawtrace_qc.report import ReportAssetMode, ReportOptions
+from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 
 
 def _bruker_candidate(path: Path) -> DiscoveryCandidate:
@@ -62,7 +61,7 @@ class TestTraceCache:
 
 
 class TestThermoToolManager:
-    def test_default_install_directory_is_scoped_by_helper_release(
+    def test_default_install_directory_uses_pinned_helper_version(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         data_directory = tmp_path / "appdata"
@@ -71,38 +70,64 @@ class TestThermoToolManager:
             lambda **_kwargs: str(data_directory),
         )
 
-        first_release = ThermoToolManager(ThermoToolSettings(), release_version="0.1.0")
-        second_release = ThermoToolManager(ThermoToolSettings(), release_version="0.2.0")
+        manager = ThermoToolManager(ThermoToolSettings())
 
         assert (
-            first_release.install_directory
-            == (data_directory / "tools" / "thermoscanheaderextractor" / "0.1.0").resolve()
+            manager.install_directory
+            == (data_directory / "tools" / "thermoscanheaderextractor" / THERMO_HELPER_SPECIFICATION.version).resolve()
         )
-        assert (
-            second_release.install_directory
-            == (data_directory / "tools" / "thermoscanheaderextractor" / "0.2.0").resolve()
-        )
-        assert first_release.install_directory != second_release.install_directory
         assert not data_directory.exists()
 
-    def test_downloads_and_verifies_configured_helper(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
+    def test_downloads_verifies_and_extracts_the_pinned_archive(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        payload = b"thermo helper"
-        monkeypatch.setattr("rawtrace_qc.gui.thermo.urlopen", lambda url, timeout: BytesIO(payload))
-        settings = ThermoToolSettings(
-            download_url="https://example.test/helper.exe", sha256=hashlib.sha256(payload).hexdigest()
+        executable_payload = b"thermo helper executable"
+        archive_buffer = BytesIO()
+        with ZipFile(archive_buffer, "w") as archive:
+            archive.writestr(THERMO_HELPER_SPECIFICATION.executable_name, executable_payload)
+        archive_payload = archive_buffer.getvalue()
+        test_specification = replace(
+            THERMO_HELPER_SPECIFICATION,
+            download_url="https://example.test/pinned-helper.zip",
+            sha256=hashlib.sha256(archive_payload).hexdigest(),
         )
+        monkeypatch.setattr("rawtrace_qc.gui.thermo.THERMO_HELPER_SPECIFICATION", test_specification)
+        requested_urls: list[str] = []
 
-        path = ThermoToolManager(settings, tmp_path / "tools").ensure_available()
+        def open_archive(url: str, timeout: int) -> BytesIO:
+            requested_urls.append(url)
+            return BytesIO(archive_payload)
 
-        assert path.read_bytes() == payload
+        monkeypatch.setattr("rawtrace_qc.gui.thermo.urlopen", open_archive)
 
-    def test_missing_download_configuration_is_actionable(self, tmp_path: Path) -> None:
-        with pytest.raises(ConfigurationError, match="download_url"):
+        path = ThermoToolManager(ThermoToolSettings(), tmp_path / "tools").ensure_available()
+
+        assert requested_urls == [test_specification.download_url]
+        assert path.name == test_specification.executable_name
+        assert path.read_bytes() == executable_payload
+
+    def test_rejects_pinned_archive_with_incorrect_checksum(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        archive_payload = b"not the pinned archive"
+        test_specification = replace(
+            THERMO_HELPER_SPECIFICATION, download_url="https://example.test/pinned-helper.zip", sha256="0" * 64
+        )
+        monkeypatch.setattr("rawtrace_qc.gui.thermo.THERMO_HELPER_SPECIFICATION", test_specification)
+        monkeypatch.setattr("rawtrace_qc.gui.thermo.urlopen", lambda url, timeout: BytesIO(archive_payload))
+
+        with pytest.raises(ConfigurationError, match="SHA-256 verification"):
             ThermoToolManager(ThermoToolSettings(), tmp_path / "tools").ensure_available()
+
+    def test_configured_local_executable_bypasses_download(self, tmp_path: Path) -> None:
+        executable_path = tmp_path / "ThermoScanHeaderExtractor.exe"
+        executable_path.write_bytes(b"local helper")
+
+        path = ThermoToolManager(
+            ThermoToolSettings(executable_path=executable_path), tmp_path / "tools"
+        ).ensure_available()
+
+        assert path == executable_path.resolve()
 
 
 class TestReportGeneration:
@@ -126,10 +151,12 @@ class TestReportGeneration:
         assert second.cache_hits == 1
 
     def test_thermo_generation_requires_helper_configuration(
-        self,
-        tmp_path: Path,
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         candidate = DiscoveryCandidate(tmp_path / "sample.raw", Vendor.THERMO, FileFormat.RAW)
+        monkeypatch.setattr(
+            "rawtrace_qc.gui.thermo.ThermoToolManager.ensure_available", lambda _manager: tmp_path / "helper.exe"
+        )
 
-        with pytest.raises(ConfigurationError, match="download_url"):
+        with pytest.raises(ConfigurationError, match="command and trace-output adapter"):
             generate_report((candidate,), TraceCache(tmp_path / "cache"))

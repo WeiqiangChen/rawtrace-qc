@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+import socket
 import sqlite3
 from pathlib import Path
 
 import pytest
+
+
+def _internet_reachable() -> bool:
+    try:
+        with socket.create_connection(("github.com", 443), timeout=2):
+            return True
+    except OSError:
+        return False
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    network_items = [item for item in items if "network" in item.keywords]
+    if not network_items or _internet_reachable():
+        return
+    skip_network = pytest.mark.skip(reason="no internet connection to GitHub")
+    for item in network_items:
+        item.add_marker(skip_network)
 
 
 @pytest.fixture

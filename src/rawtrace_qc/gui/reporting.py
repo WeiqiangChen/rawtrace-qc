@@ -106,9 +106,8 @@ def generate_report(
     """Extract active candidates and write one combined HTML report.
 
     Bruker candidates use the native extractor and cache. Thermo candidates
-    first resolve the configured standalone helper, then report that the
-    vendor adapter still needs its command/output contract; the GUI therefore
-    fails with an actionable message instead of producing a partial report.
+    first resolve the pinned helper, then report that the vendor adapter still
+    needs its command/output contract instead of producing a partial report.
 
     Args:
         candidates: Active, validated raw acquisitions in report order.
@@ -125,7 +124,7 @@ def generate_report(
 
     Raises:
         ConfigurationError: If no candidates are active, a vendor is not
-            supported, or Thermo extraction is not fully configured.
+            supported, or the pinned Thermo helper cannot be installed.
     """
     selected_options = options or ReportGenerationOptions()
     selected_candidates = tuple(candidates)

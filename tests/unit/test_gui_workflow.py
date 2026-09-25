@@ -60,11 +60,7 @@ def test_gui_settings_round_trip(tmp_path: Path) -> None:
         patterns=(FilenamePattern("run", r"run_\\d+"),),
         cache_directory=tmp_path / "cache",
         report_directory=tmp_path / "reports",
-        thermo=ThermoToolSettings(
-            download_url="https://example.test/helper.exe",
-            sha256="a" * 64,
-            executable_path=tmp_path / "helper.exe",
-        ),
+        thermo=ThermoToolSettings(executable_path=tmp_path / "helper.exe"),
     )
 
     save_settings(settings, config_path)

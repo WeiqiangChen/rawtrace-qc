@@ -27,6 +27,7 @@ from rawtrace_qc.gui.reporting import (
 )
 from rawtrace_qc.gui.workflow import RawFileSelection
 from rawtrace_qc.paths import default_data_directory
+from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 
 
 def main() -> int:
@@ -826,8 +827,6 @@ def create_window(
             form = qt_widgets.QFormLayout()
             cache_edit = qt_widgets.QLineEdit(str(self._settings.cache_directory))
             report_edit = qt_widgets.QLineEdit(str(self._settings.report_directory))
-            helper_url = qt_widgets.QLineEdit(self._settings.thermo.download_url or "")
-            helper_hash = qt_widgets.QLineEdit(self._settings.thermo.sha256 or "")
             helper_path = qt_widgets.QLineEdit(
                 str(self._settings.thermo.executable_path or "")
             )
@@ -850,16 +849,21 @@ def create_window(
             form.addRow("Minimum age (minutes)", age_edit)
             form.addRow("Trace cache", _path_editor(cache_edit, dialog, False))
             form.addRow("Permanent reports", _path_editor(report_edit, dialog, False))
-            form.addRow("Thermo helper URL", helper_url)
-            form.addRow("Thermo helper SHA-256", helper_hash)
+            form.addRow(
+                "Pinned Thermo helper",
+                qt_widgets.QLabel(
+                    f"v{THERMO_HELPER_SPECIFICATION.version} - "
+                    f"{THERMO_HELPER_SPECIFICATION.asset_name}"
+                ),
+            )
             form.addRow(
                 "Thermo helper executable",
                 _path_editor(helper_path, dialog, True),
             )
             layout.addLayout(form)
             note = qt_widgets.QLabel(
-                "The helper URL must point to a trusted standalone executable. "
-                "The checksum is verified when it is supplied."
+                "When no local executable is selected, rawtrace-qc downloads the "
+                "pinned archive and verifies its SHA-256 before installation."
             )
             note.setWordWrap(True)
             note.setObjectName("muted")
@@ -876,8 +880,6 @@ def create_window(
                     dialog,
                     cache_edit,
                     report_edit,
-                    helper_url,
-                    helper_hash,
                     helper_path,
                     size_edit,
                     age_edit,
@@ -888,8 +890,6 @@ def create_window(
                 lambda: self._reset_settings_dialog(
                     cache_edit,
                     report_edit,
-                    helper_url,
-                    helper_hash,
                     helper_path,
                     size_edit,
                     age_edit,
@@ -911,8 +911,6 @@ def create_window(
             dialog: Any,
             cache_edit: Any,
             report_edit: Any,
-            helper_url: Any,
-            helper_hash: Any,
             helper_path: Any,
             size_edit: Any,
             age_edit: Any,
@@ -938,11 +936,7 @@ def create_window(
                     patterns=tuple(self._saved_patterns),
                     cache_directory=Path(cache_edit.text()),
                     report_directory=Path(report_edit.text()),
-                    thermo=_thermo_settings(
-                        helper_url.text(),
-                        helper_hash.text(),
-                        helper_path.text(),
-                    ),
+                    thermo=_thermo_settings(helper_path.text()),
                 )
                 if persist:
                     save_settings(updated, settings_path)
@@ -961,8 +955,6 @@ def create_window(
             self,
             cache_edit: Any,
             report_edit: Any,
-            helper_url: Any,
-            helper_hash: Any,
             helper_path: Any,
             size_edit: Any,
             age_edit: Any,
@@ -970,8 +962,6 @@ def create_window(
             defaults = GuiSettings()
             cache_edit.setText(str(defaults.cache_directory))
             report_edit.setText(str(defaults.report_directory))
-            helper_url.clear()
-            helper_hash.clear()
             helper_path.clear()
             size_edit.setText(str(defaults.min_size_mb))
             age_edit.setText(str(defaults.min_age_minutes))
@@ -1078,13 +1068,11 @@ def _dialog_start_directory(path_text: str) -> str:
     return str(default_data_directory())
 
 
-def _thermo_settings(url: str, checksum: str, executable: str) -> Any:
-    """Build helper settings from GUI text fields."""
+def _thermo_settings(executable: str) -> Any:
+    """Build helper settings from the optional local executable field."""
     from rawtrace_qc.gui.config import ThermoToolSettings
 
     return ThermoToolSettings(
-        download_url=url.strip() or None,
-        sha256=checksum.strip() or None,
         executable_path=Path(executable.strip()) if executable.strip() else None,
     )
 
