@@ -14,7 +14,6 @@ from rawtrace_qc.errors import ConfigurationError, DiscoveryError
 from rawtrace_qc.gui.cache import TraceCache
 from rawtrace_qc.gui.config import (
     GuiSettings,
-    default_data_directory,
     load_settings,
     save_settings,
 )
@@ -27,6 +26,7 @@ from rawtrace_qc.gui.reporting import (
     generate_report,
 )
 from rawtrace_qc.gui.workflow import RawFileSelection
+from rawtrace_qc.paths import default_data_directory
 
 
 def main() -> int:

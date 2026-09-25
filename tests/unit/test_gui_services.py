@@ -34,16 +34,8 @@ class TestTraceCache:
         cache = TraceCache(tmp_path / "cache")
         candidate = _bruker_candidate(bruker_fixture)
 
-        first = cache.extract(
-            candidate,
-            BrukerExtractor(),
-            select_msn=False,
-        )
-        second = cache.extract(
-            candidate,
-            BrukerExtractor(),
-            select_msn=False,
-        )
+        first = cache.extract(candidate, BrukerExtractor(), select_msn=False)
+        second = cache.extract(candidate, BrukerExtractor(), select_msn=False)
 
         assert first.cache_hit is False
         assert second.cache_hit is True
@@ -70,19 +62,38 @@ class TestTraceCache:
 
 
 class TestThermoToolManager:
+    def test_default_install_directory_is_scoped_by_helper_release(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        data_directory = tmp_path / "appdata"
+        monkeypatch.setattr(
+            "rawtrace_qc.paths.user_data_dir",
+            lambda **_kwargs: str(data_directory),
+        )
+
+        first_release = ThermoToolManager(ThermoToolSettings(), release_version="0.1.0")
+        second_release = ThermoToolManager(ThermoToolSettings(), release_version="0.2.0")
+
+        assert (
+            first_release.install_directory
+            == (data_directory / "tools" / "thermoscanheaderextractor" / "0.1.0").resolve()
+        )
+        assert (
+            second_release.install_directory
+            == (data_directory / "tools" / "thermoscanheaderextractor" / "0.2.0").resolve()
+        )
+        assert first_release.install_directory != second_release.install_directory
+        assert not data_directory.exists()
+
     def test_downloads_and_verifies_configured_helper(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         payload = b"thermo helper"
-        monkeypatch.setattr(
-            "rawtrace_qc.gui.thermo.urlopen",
-            lambda url, timeout: BytesIO(payload),
-        )
+        monkeypatch.setattr("rawtrace_qc.gui.thermo.urlopen", lambda url, timeout: BytesIO(payload))
         settings = ThermoToolSettings(
-            download_url="https://example.test/helper.exe",
-            sha256=hashlib.sha256(payload).hexdigest(),
+            download_url="https://example.test/helper.exe", sha256=hashlib.sha256(payload).hexdigest()
         )
 
         path = ThermoToolManager(settings, tmp_path / "tools").ensure_available()
@@ -95,11 +106,7 @@ class TestThermoToolManager:
 
 
 class TestReportGeneration:
-    def test_generates_a_permanent_report_and_reuses_the_cache(
-        self,
-        bruker_fixture: Path,
-        tmp_path: Path,
-    ) -> None:
+    def test_generates_a_permanent_report_and_reuses_the_cache(self, bruker_fixture: Path, tmp_path: Path) -> None:
         candidate = _bruker_candidate(bruker_fixture)
         options = ReportGenerationOptions(
             storage_mode=ReportStorageMode.PERMANENT,
@@ -122,11 +129,7 @@ class TestReportGeneration:
         self,
         tmp_path: Path,
     ) -> None:
-        candidate = DiscoveryCandidate(
-            tmp_path / "sample.raw",
-            Vendor.THERMO,
-            FileFormat.RAW,
-        )
+        candidate = DiscoveryCandidate(tmp_path / "sample.raw", Vendor.THERMO, FileFormat.RAW)
 
         with pytest.raises(ConfigurationError, match="download_url"):
             generate_report((candidate,), TraceCache(tmp_path / "cache"))

@@ -10,7 +10,8 @@ from urllib.parse import urlparse
 from urllib.request import urlopen
 
 from rawtrace_qc.errors import ConfigurationError
-from rawtrace_qc.gui.config import ThermoToolSettings, default_data_directory
+from rawtrace_qc.gui.config import ThermoToolSettings
+from rawtrace_qc.paths import helper_tool_directory
 
 
 class ThermoToolManager:
@@ -20,14 +21,25 @@ class ThermoToolManager:
         self,
         settings: ThermoToolSettings,
         install_directory: Path | None = None,
+        release_version: str = "0.1.0",
     ) -> None:
-        """Create a manager using helper settings and an optional install root."""
+        """Create a manager using helper settings and an optional install root.
+
+        Args:
+            settings: Thermo helper download and executable settings.
+            install_directory: Explicit install directory. Defaults to None.
+            release_version: Helper release version used to isolate the
+                default install directory. Defaults to `"0.1.0"`.
+        """
         self.settings = settings
         self.install_directory = (
             (
                 Path(install_directory)
                 if install_directory is not None
-                else default_data_directory() / "tools"
+                else helper_tool_directory(
+                    "thermoscanheaderextractor",
+                    release_version,
+                )
             )
             .expanduser()
             .resolve()

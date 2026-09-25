@@ -7,14 +7,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from platformdirs import user_data_dir
-
 from rawtrace_qc.discovery import DiscoveryOptions, DiscoveryScope
 from rawtrace_qc.errors import ConfigurationError
 from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode
-
-_APP_NAME = "rawtrace-qc"
-_APP_AUTHOR = "perutzms"
+from rawtrace_qc.paths import default_data_directory
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,17 +107,6 @@ class GuiSettings:
             min_size_bytes=self.min_size_mb * 1024 * 1024,
             min_age_seconds=self.min_age_minutes * 60,
         )
-
-
-def default_data_directory() -> Path:
-    """Return the platformdirs-selected per-user rawtrace-qc data directory."""
-    return Path(
-        user_data_dir(
-            appname=_APP_NAME,
-            appauthor=_APP_AUTHOR,
-            roaming=False,
-        )
-    )
 
 
 def default_config_path() -> Path:

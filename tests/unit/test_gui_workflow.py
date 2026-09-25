@@ -94,7 +94,7 @@ def test_gui_defaults_use_platformdirs_appdata(
 ) -> None:
     appdata = tmp_path / "appdata"
     monkeypatch.setattr(
-        "rawtrace_qc.gui.config.user_data_dir",
+        "rawtrace_qc.paths.user_data_dir",
         lambda **_kwargs: str(appdata),
     )
 
@@ -112,7 +112,7 @@ def test_save_settings_creates_the_default_appdata_config(
 ) -> None:
     appdata = tmp_path / "appdata"
     monkeypatch.setattr(
-        "rawtrace_qc.gui.config.user_data_dir",
+        "rawtrace_qc.paths.user_data_dir",
         lambda **_kwargs: str(appdata),
     )
 
