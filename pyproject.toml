@@ -38,8 +38,9 @@ dev = [
 addopts = ["--strict-config", "--strict-markers"]
 testpaths = ["tests"]
 markers = [
+    "unit: fast unit tests without external resources or network access",
     "network: tests that require network access",
-    "integration: tests requiring a real ThermoScanHeaderExtractor install on Windows",
+    "integration: tests covering multi-component workflows and cross-module behavior",
 ]
 
 [tool.coverage.run]

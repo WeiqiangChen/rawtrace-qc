@@ -1,18 +1,19 @@
-"""Tests for shared network-test behavior."""
+"""Tests for shared network-test and collection behavior."""
 
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 from urllib.error import HTTPError
 
 import pytest
-import tests.conftest as test_conftest
+import tests.support.collection as collection_support
 import tests.support.network as network_support
 
 
 class _CollectedItem:
-    def __init__(self, is_network: bool) -> None:
-        self.keywords = {"network"} if is_network else {}
+    def __init__(self, path: Path) -> None:
+        self.path = path
         self.markers: list[pytest.MarkDecorator] = []
 
     def add_marker(self, marker: pytest.MarkDecorator) -> None:
@@ -56,23 +57,80 @@ class TestUrlopenOrSkip:
 
         monkeypatch.setattr(network_support, "urlopen", missing_asset)
 
-        with pytest.raises(HTTPError) as error, network_support.urlopen_or_skip("https://example.test/missing"):
-            raise AssertionError("A missing asset must not yield a response.")
+        with pytest.raises(HTTPError) as error:
+            with network_support.urlopen_or_skip("https://example.test/missing"):
+                raise AssertionError("A missing asset must not yield a response.")
 
         assert error.value.code == 404
 
 
-class TestNetworkCollectionHook:
-    def test_marks_only_network_tests_to_skip_when_offline(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        monkeypatch.setattr(test_conftest, "_internet_reachable", lambda: False)
-        network_item = _CollectedItem(is_network=True)
-        unit_item = _CollectedItem(is_network=False)
+class TestInternetReachable:
+    def test_returns_true_when_socket_connects(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _DummySocket:
+            def __enter__(self) -> _DummySocket:
+                return self
 
-        test_conftest.pytest_collection_modifyitems([network_item, unit_item])
+            def __exit__(self, *args: object) -> None:
+                pass
 
-        assert len(network_item.markers) == 1
-        assert network_item.markers[0].mark.name == "skip"
-        assert unit_item.markers == []
+        monkeypatch.setattr(
+            "tests.support.collection.socket.create_connection",
+            lambda target, timeout: _DummySocket(),
+        )
+
+        assert collection_support.internet_reachable() is True
+
+    def test_returns_false_on_socket_os_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fail_connection(target: tuple[str, int], timeout: float) -> None:
+            raise OSError("connection refused")
+
+        monkeypatch.setattr(
+            "tests.support.collection.socket.create_connection",
+            fail_connection,
+        )
+
+        assert collection_support.internet_reachable() is False
+
+
+class TestTagTestItems:
+    def test_tags_items_by_folder_and_skips_network_when_offline(self, tmp_path: Path) -> None:
+        unit_item = _CollectedItem(tmp_path / "unit" / "test_unit.py")
+        network_item = _CollectedItem(tmp_path / "network" / "test_network.py")
+        integration_item = _CollectedItem(tmp_path / "integration" / "test_integration.py")
+
+        collection_support.tag_test_items(
+            [unit_item, network_item, integration_item],
+            tests_root=tmp_path,
+            reachable=False,
+        )
+
+        assert [m.mark.name for m in unit_item.markers] == ["unit"]
+        assert [m.mark.name for m in network_item.markers] == ["network", "skip"]
+        assert network_item.markers[1].mark.kwargs["reason"] == "no internet connection to GitHub"
+        assert [m.mark.name for m in integration_item.markers] == ["integration"]
+
+    def test_tags_items_by_folder_without_skipping_network_when_online(self, tmp_path: Path) -> None:
+        unit_item = _CollectedItem(tmp_path / "unit" / "test_unit.py")
+        network_item = _CollectedItem(tmp_path / "network" / "test_network.py")
+        integration_item = _CollectedItem(tmp_path / "integration" / "test_integration.py")
+
+        collection_support.tag_test_items(
+            [unit_item, network_item, integration_item],
+            tests_root=tmp_path,
+            reachable=True,
+        )
+
+        assert [m.mark.name for m in unit_item.markers] == ["unit"]
+        assert [m.mark.name for m in network_item.markers] == ["network"]
+        assert [m.mark.name for m in integration_item.markers] == ["integration"]
+
+    def test_unmatched_items_do_not_receive_tier_markers(self, tmp_path: Path) -> None:
+        other_item = _CollectedItem(tmp_path / "other" / "test_other.py")
+
+        collection_support.tag_test_items(
+            [other_item],
+            tests_root=tmp_path,
+            reachable=True,
+        )
+
+        assert other_item.markers == []
