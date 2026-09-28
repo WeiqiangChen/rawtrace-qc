@@ -26,7 +26,7 @@ The package is library-first. Applications such as a command-line tool or GUI sh
 
 The public library is organized around services that can be used by any application. Applications should provide input directories and options, call the relevant service, and present the returned models to users. Filesystem traversal, vendor recognition, validation, and error handling belong in the library.
 
-The public services currently include `rawtrace_qc.discovery.discover`, `rawtrace_qc.extractors.BrukerExtractor`, and the trace artifact functions in `rawtrace_qc.traces`. Later processing and reporting services will follow the same pattern and remain independent of any particular application interface.
+The public services currently include `rawtrace_qc.discovery.discover`, `rawtrace_qc.extractors.BrukerExtractor`, Thermo helper locating and status services in `rawtrace_qc.thermo`, and the trace artifact functions in `rawtrace_qc.traces`. Later processing and reporting services will follow the same pattern and remain independent of any particular application interface.
 
 ## File Discovery
 
@@ -111,6 +111,70 @@ if result.msn_path is not None:
 The extractor overwrites existing artifacts with the same destination path. It currently emits `scan_id`, `retention_time_sec`, `ms_level`, and the available native `total_ion_current` and `base_peak_intensity` columns. Each artifact records the input folder name, including its `.d` suffix, as the required `source_filename` metadata field. The test SQLite fixture retains additional frame fields such as `AccumulationTime` for future extraction work, but `injection_time_ms` is not emitted yet.
 
 Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the recommended `acquisition_start_time` metadata field, normalized to an ISO-8601 UTC timestamp and shared by the MS1 and MSn artifacts. It records `GlobalMetadata.AnalysisId` as the recommended `source_id` metadata field when present.
+
+## Thermo Helper Integration (ThermoScanHeaderExtractor)
+
+Thermo `.raw` scan-header extraction relies on an external Windows command-line utility named `ThermoScanHeaderExtractor`. The library manages specification pinning, helper location, status inspection, and license verification.
+
+### Pinned Release Specification
+
+The expected helper release is pinned in `rawtrace_qc.thermo.THERMO_HELPER_SPECIFICATION`. This specification defines the exact expected release version (`0.1.0`), asset archive name, official download URL, SHA-256 checksum digest, and executable name (`ThermoScanHeaderExtractor.exe`).
+
+### Helper Locating and Resolution Priority
+
+The library locates the helper without side effects, searching in strict priority order:
+
+1. **Explicit path**: A user-supplied path to the executable or its containing directory (via `explicit_path`).
+2. **Managed user data directory**: The pinned release directory in the per-user application data directory, located at `<user_data_dir>/tools/thermoscanheaderextractor/<version>/ThermoScanHeaderExtractor.exe`.
+
+`find_thermo_helper_path()` checks these locations on disk without executing any process. If neither candidate exists, it returns `None`.
+
+### Status and License Verification
+
+`get_thermo_helper_status()` inspects the helper state without side effects, returning a `ThermoHelperStatus` object. When no helper executable exists on disk, it returns immediately without running any subprocess. When an executable is present, it checks for license acceptance and verifies the reported version by executing `--version`.
+
+The status distinguishes at least:
+
+- `ThermoHelperState.NOT_INSTALLED`: No helper executable was found at the prioritized locations. No subprocess is executed.
+- `ThermoHelperState.UNSUPPORTED_PLATFORM`: The current platform is not Windows.
+- `ThermoHelperState.UNLICENSED`: The helper is installed and its version matches, but the license agreement marker (`.thermo-license-accepted`) is missing beside the executable.
+- `ThermoHelperState.INVALID_VERSION`: The helper is installed but returned an unreadable version, crashed, timed out, or reported a version that does not match the pinned specification.
+- `ThermoHelperState.READY`: The helper is installed, matches the expected version, and has the license marker present beside the executable.
+
+### Locating a Usable Helper
+
+`locate_thermo_helper()` returns the validated `Path` to a ready helper executable. If the helper is not ready or the platform is unsupported, it raises a specific, actionable exception:
+
+- `UnsupportedPlatformError`: Raised on non-Windows platforms (`sys.platform != "win32"`).
+- `ThermoHelperNotFoundError`: Raised when no executable is found at the prioritized locations, with searched paths and installation guidance.
+- `ThermoHelperVersionError`: Raised when the helper reports a mismatched version or fails to report a readable version.
+- `ThermoHelperLicenseError`: Raised when the Thermo license agreement has not been accepted via `ThermoScanHeaderExtractor.exe --agree-to-terms`.
+
+### Basic Helper Example
+
+```python
+from pathlib import Path
+
+from rawtrace_qc.thermo import (
+	ThermoHelperState,
+	get_thermo_helper_status,
+	locate_thermo_helper,
+)
+
+# Inspect helper status without raising exceptions
+status = get_thermo_helper_status()
+print(status.state, status.message)
+
+if status.state is ThermoHelperState.READY:
+	print(f"Helper is ready at: {status.path} (version {status.version})")
+
+# Locate helper for extraction, raising dedicated exceptions on problems
+try:
+	executable = locate_thermo_helper()
+	print(f"Usable helper executable: {executable}")
+except Exception as error:
+	print(f"Cannot use helper: {error}")
+```
 
 ## Scan-Trace Import and Validation
 

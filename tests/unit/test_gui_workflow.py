@@ -123,7 +123,7 @@ def test_selection_validates_paths_and_keeps_unique_active_entries(
 ) -> None:
     raw = tmp_path / "sample.raw"
     raw.write_bytes(b"raw")
-    selection = RawFileSelection(DiscoveryOptions(min_size_bytes=1, min_age_seconds=0))
+    selection = RawFileSelection(DiscoveryOptions(min_size_bytes=1, min_age_seconds=0, clock=lambda: 10_000_000_000.0))
 
     first = selection.add_paths((raw, raw))
     second = selection.add_paths((tmp_path / "invalid.txt",))

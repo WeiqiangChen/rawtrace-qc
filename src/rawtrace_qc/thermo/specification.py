@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+THERMO_HELPER_NAME = "thermoscanheaderextractor"
+THERMO_LICENSE_MARKER_NAME = ".thermo-license-accepted"
+
 
 @dataclass(frozen=True, slots=True)
 class ThermoHelperSpecification:
@@ -14,6 +17,8 @@ class ThermoHelperSpecification:
     download_url: str
     sha256: str
     executable_name: str
+    tool_name: str = THERMO_HELPER_NAME
+    license_marker_name: str = THERMO_LICENSE_MARKER_NAME
 
 
 THERMO_HELPER_SPECIFICATION = ThermoHelperSpecification(

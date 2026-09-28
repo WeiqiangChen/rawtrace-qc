@@ -25,3 +25,23 @@ class ProcessingError(RawtraceError):
 
 class ReportError(RawtraceError):
     """Raise when report data or HTML cannot be created."""
+
+
+class ThermoHelperError(RawtraceError):
+    """Base class for ThermoScanHeaderExtractor helper errors."""
+
+
+class UnsupportedPlatformError(ThermoHelperError):
+    """Raise when an operation is unsupported on the current operating system."""
+
+
+class ThermoHelperNotFoundError(ThermoHelperError):
+    """Raise when no usable ThermoScanHeaderExtractor executable is found."""
+
+
+class ThermoHelperVersionError(ThermoHelperError):
+    """Raise when the Thermo helper version is invalid, unreadable, or mismatched."""
+
+
+class ThermoHelperLicenseError(ThermoHelperError):
+    """Raise when the Thermo license agreement has not been accepted."""
