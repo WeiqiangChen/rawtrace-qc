@@ -128,12 +128,7 @@ class TestSettingsDialog:
                     if isinstance(widget, qt_widgets.QDialog) and widget.isVisible()
                 )
                 buttons = {button.text(): button for button in dialog.findChildren(qt_widgets.QPushButton)}
-                assert {
-                    "Apply",
-                    "Apply and save",
-                    "Cancel",
-                    "Reset defaults",
-                } <= buttons.keys()
+                assert {"Apply", "Apply and save", "Cancel", "Reset defaults"} <= buttons.keys()
                 cache_edit = next(
                     edit
                     for edit in dialog.findChildren(qt_widgets.QLineEdit)

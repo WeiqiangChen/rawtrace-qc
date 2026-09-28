@@ -78,10 +78,7 @@ class TestReportOptions:
             {"initial_view": "invalid"},
         ],
     )
-    def test_invalid_options_raise_configuration_error(
-        self,
-        kwargs: dict[str, object],
-    ) -> None:
+    def test_invalid_options_raise_configuration_error(self, kwargs: dict[str, object]) -> None:
         with pytest.raises(ConfigurationError):
             ReportOptions(**kwargs)  # type: ignore[arg-type]
 
@@ -90,10 +87,7 @@ class TestBuildReport:
     def test_build_report_discovers_channels_and_metadata(self) -> None:
         report = build_report([_processed_table(faims_cv=-50.0)])
 
-        assert [channel.key for channel in report.channels] == [
-            "total_ion_current",
-            "base_peak_intensity",
-        ]
+        assert [channel.key for channel in report.channels] == ["total_ion_current", "base_peak_intensity"]
         assert [channel.label for channel in report.channels] == ["TIC", "BPC"]
         assert report.initial_channel == "total_ion_current"
         assert report.available_ms_levels == (1,)
@@ -117,22 +111,13 @@ class TestBuildReport:
         assert report.initial_channel == "base_peak_intensity"
         assert report.initial_view is ReportViewMode.STACKED
         assert report.metadata_fields == ("vendor", "acquisition_path")
-        assert report.metadata_rows[0].values == (
-            ("vendor", "bruker"),
-            ("acquisition_path", None),
-        )
+        assert report.metadata_rows[0].values == (("vendor", "bruker"), ("acquisition_path", None))
 
     def test_channel_spec_controls_display_label_and_axis_title(self) -> None:
         report = build_report(
             [_processed_table(channels=("total_ion_current",))],
             options=ReportOptions(
-                channel_specs=(
-                    ChannelSpec(
-                        key="total_ion_current",
-                        label="Signal",
-                        y_axis_title="Counts",
-                    ),
-                )
+                channel_specs=(ChannelSpec(key="total_ion_current", label="Signal", y_axis_title="Counts"),)
             ),
         )
 
@@ -147,10 +132,7 @@ class TestBuildReport:
             )
 
     def test_invalid_processed_table_is_rejected(self) -> None:
-        invalid = ProcessedTable(
-            table=pa.table({"total_ion_current": [1.0]}),
-            metadata=_processed_table().metadata,
-        )
+        invalid = ProcessedTable(table=pa.table({"total_ion_current": [1.0]}), metadata=_processed_table().metadata)
 
         with pytest.raises(ReportError, match="retention_time_min"):
             build_report([invalid])
@@ -272,10 +254,7 @@ class TestHtmlReport:
         assert output_path.read_text(encoding="utf-8").startswith("<!doctype html>")
 
     def test_report_without_channels_still_exposes_metadata_tab(self) -> None:
-        html = render_html(
-            [_processed_table(channels=())],
-            options=ReportOptions(asset_mode=ReportAssetMode.CDN),
-        )
+        html = render_html([_processed_table(channels=())], options=ReportOptions(asset_mode=ReportAssetMode.CDN))
 
         assert 'data-panel="metadata-panel"' in html
         assert 'id="report-plot"' not in html

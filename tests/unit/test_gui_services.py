@@ -25,11 +25,7 @@ def _bruker_candidate(path: Path) -> DiscoveryCandidate:
 
 
 class TestTraceCache:
-    def test_extracts_once_and_loads_valid_artifacts_on_second_call(
-        self,
-        bruker_fixture: Path,
-        tmp_path: Path,
-    ) -> None:
+    def test_extracts_once_and_loads_valid_artifacts_on_second_call(self, bruker_fixture: Path, tmp_path: Path) -> None:
         cache = TraceCache(tmp_path / "cache")
         candidate = _bruker_candidate(bruker_fixture)
 
@@ -43,9 +39,7 @@ class TestTraceCache:
         assert second.extraction.ms1_path.is_file()
 
     def test_partial_cache_is_rebuilt_when_both_levels_are_requested(
-        self,
-        bruker_fixture: Path,
-        tmp_path: Path,
+        self, bruker_fixture: Path, tmp_path: Path
     ) -> None:
         cache = TraceCache(tmp_path / "cache")
         candidate = _bruker_candidate(bruker_fixture)

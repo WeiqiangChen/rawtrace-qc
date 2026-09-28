@@ -52,12 +52,7 @@ def _options(**kwargs: object) -> DiscoveryOptions:
     return DiscoveryOptions(**values)  # type: ignore[arg-type]
 
 
-def _future_validator(
-    tree: TraversalTree,
-    min_size_bytes: int,
-    min_age_seconds: float,
-    now: float,
-) -> tuple[Path, ...]:
+def _future_validator(tree: TraversalTree, min_size_bytes: int, min_age_seconds: float, now: float) -> tuple[Path, ...]:
     del min_size_bytes, min_age_seconds, now
     return tree.files
 
@@ -162,10 +157,7 @@ class TestDiscover:
 
         result = discover(tmp_path, _options())
 
-        assert [candidate.path.name for candidate in result.candidates] == [
-            "a.d",
-            "z.raw",
-        ]
+        assert [candidate.path.name for candidate in result.candidates] == ["a.d", "z.raw"]
 
     def test_direct_scope_omits_descendants(self, tmp_path: Path) -> None:
         nested = tmp_path / "nested"

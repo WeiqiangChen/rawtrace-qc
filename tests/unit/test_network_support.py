@@ -22,11 +22,7 @@ class _CollectedItem:
 
 class TestUrlopenOrSkip:
     def test_yields_successful_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(
-            network_support,
-            "urlopen",
-            lambda url, timeout: BytesIO(b"asset"),
-        )
+        monkeypatch.setattr(network_support, "urlopen", lambda url, timeout: BytesIO(b"asset"))
 
         with network_support.urlopen_or_skip("https://example.test/asset") as response:
             assert response.read() == b"asset"
@@ -57,9 +53,8 @@ class TestUrlopenOrSkip:
 
         monkeypatch.setattr(network_support, "urlopen", missing_asset)
 
-        with pytest.raises(HTTPError) as error:
-            with network_support.urlopen_or_skip("https://example.test/missing"):
-                raise AssertionError("A missing asset must not yield a response.")
+        with pytest.raises(HTTPError) as error, network_support.urlopen_or_skip("https://example.test/missing"):
+            raise AssertionError("A missing asset must not yield a response.")
 
         assert error.value.code == 404
 
@@ -73,10 +68,7 @@ class TestInternetReachable:
             def __exit__(self, *args: object) -> None:
                 pass
 
-        monkeypatch.setattr(
-            "tests.support.collection.socket.create_connection",
-            lambda target, timeout: _DummySocket(),
-        )
+        monkeypatch.setattr("tests.support.collection.socket.create_connection", lambda target, timeout: _DummySocket())
 
         assert collection_support.internet_reachable() is True
 
@@ -84,10 +76,7 @@ class TestInternetReachable:
         def fail_connection(target: tuple[str, int], timeout: float) -> None:
             raise OSError("connection refused")
 
-        monkeypatch.setattr(
-            "tests.support.collection.socket.create_connection",
-            fail_connection,
-        )
+        monkeypatch.setattr("tests.support.collection.socket.create_connection", fail_connection)
 
         assert collection_support.internet_reachable() is False
 
@@ -99,9 +88,7 @@ class TestTagTestItems:
         integration_item = _CollectedItem(tmp_path / "integration" / "test_integration.py")
 
         collection_support.tag_test_items(
-            [unit_item, network_item, integration_item],
-            tests_root=tmp_path,
-            reachable=False,
+            [unit_item, network_item, integration_item], tests_root=tmp_path, reachable=False
         )
 
         assert [m.mark.name for m in unit_item.markers] == ["unit"]
@@ -115,9 +102,7 @@ class TestTagTestItems:
         integration_item = _CollectedItem(tmp_path / "integration" / "test_integration.py")
 
         collection_support.tag_test_items(
-            [unit_item, network_item, integration_item],
-            tests_root=tmp_path,
-            reachable=True,
+            [unit_item, network_item, integration_item], tests_root=tmp_path, reachable=True
         )
 
         assert [m.mark.name for m in unit_item.markers] == ["unit"]
@@ -127,10 +112,6 @@ class TestTagTestItems:
     def test_unmatched_items_do_not_receive_tier_markers(self, tmp_path: Path) -> None:
         other_item = _CollectedItem(tmp_path / "other" / "test_other.py")
 
-        collection_support.tag_test_items(
-            [other_item],
-            tests_root=tmp_path,
-            reachable=True,
-        )
+        collection_support.tag_test_items([other_item], tests_root=tmp_path, reachable=True)
 
         assert other_item.markers == []

@@ -41,10 +41,7 @@ class TestBrukerExtractor:
             connection.execute("DELETE FROM DiaFrameMsMsInfo")
             connection.commit()
 
-        result = BrukerExtractor().extract(
-            bruker_fixture,
-            output_directory=tmp_path / "empty-ms1",
-        )
+        result = BrukerExtractor().extract(bruker_fixture, output_directory=tmp_path / "empty-ms1")
 
         assert result.ms1_path is not None
         assert result.msn_path is not None
@@ -54,10 +51,7 @@ class TestBrukerExtractor:
 
     def test_rows_are_ordered_by_retention_time_then_scan_id(self, bruker_fixture: Path, tmp_path: Path) -> None:
         with sqlite3.connect(bruker_fixture / "analysis.tdf") as connection:
-            connection.executemany(
-                "UPDATE Frames SET Time = ? WHERE Id = ?",
-                [(2.0, 1), (1.0, 2), (1.0, 3)],
-            )
+            connection.executemany("UPDATE Frames SET Time = ? WHERE Id = ?", [(2.0, 1), (1.0, 2), (1.0, 3)])
             connection.execute("UPDATE Frames SET MsMsType = 0")
             connection.execute("DELETE FROM DiaFrameMsMsInfo")
             connection.commit()
@@ -77,18 +71,11 @@ class TestBrukerExtractor:
         with sqlite3.connect(bruker_fixture / "analysis.tdf") as connection:
             connection.execute("ALTER TABLE Frames RENAME TO OriginalFrames")
             connection.execute("CREATE TABLE Frames (Id INTEGER, Time REAL, MsMsType INTEGER)")
-            connection.executemany(
-                "INSERT INTO Frames VALUES (?, ?, ?)",
-                [(1, 1.0, 0), (1, 2.0, 0)],
-            )
+            connection.executemany("INSERT INTO Frames VALUES (?, ?, ?)", [(1, 1.0, 0), (1, 2.0, 0)])
             connection.commit()
 
         with pytest.raises(RuntimeError, match="duplicate scan_id"):
-            BrukerExtractor().extract(
-                bruker_fixture,
-                output_directory=tmp_path / "duplicate",
-                select_msn=False,
-            )
+            BrukerExtractor().extract(bruker_fixture, output_directory=tmp_path / "duplicate", select_msn=False)
 
     @pytest.mark.parametrize(
         ("select_ms1", "select_msn", "ms1_expected", "msn_expected"),
@@ -104,10 +91,7 @@ class TestBrukerExtractor:
         msn_expected: bool,
     ) -> None:
         result = BrukerExtractor().extract(
-            bruker_fixture,
-            output_directory=tmp_path / "selected",
-            select_ms1=select_ms1,
-            select_msn=select_msn,
+            bruker_fixture, output_directory=tmp_path / "selected", select_ms1=select_ms1, select_msn=select_msn
         )
 
         assert (result.ms1_path is not None) is ms1_expected
@@ -117,10 +101,7 @@ class TestBrukerExtractor:
         output_directory = tmp_path / "no-output"
 
         result = BrukerExtractor().extract(
-            bruker_fixture,
-            output_directory=output_directory,
-            select_ms1=False,
-            select_msn=False,
+            bruker_fixture, output_directory=output_directory, select_ms1=False, select_msn=False
         )
 
         assert result.ms1_path is None
@@ -147,18 +128,12 @@ class TestBrukerExtractor:
 
         with pytest.raises(RuntimeError, match="no MSn frames"):
             BrukerExtractor().extract(
-                bruker_fixture,
-                output_directory=tmp_path / "msn-only",
-                select_ms1=False,
-                select_msn=True,
+                bruker_fixture, output_directory=tmp_path / "msn-only", select_ms1=False, select_msn=True
             )
 
     def test_high_precision_writes_float64_trace_columns(self, bruker_fixture: Path, tmp_path: Path) -> None:
         result = BrukerExtractor().extract(
-            bruker_fixture,
-            output_directory=tmp_path / "high",
-            precision_mode="high",
-            select_msn=False,
+            bruker_fixture, output_directory=tmp_path / "high", precision_mode="high", select_msn=False
         )
 
         assert result.ms1_path is not None
@@ -169,16 +144,10 @@ class TestBrukerExtractor:
     def test_existing_output_is_overwritten(self, bruker_fixture: Path, tmp_path: Path) -> None:
         output_directory = tmp_path / "overwrite"
         first = BrukerExtractor().extract(
-            bruker_fixture,
-            output_directory=output_directory,
-            precision_mode="low",
-            select_msn=False,
+            bruker_fixture, output_directory=output_directory, precision_mode="low", select_msn=False
         )
         second = BrukerExtractor().extract(
-            bruker_fixture,
-            output_directory=output_directory,
-            precision_mode="high",
-            select_msn=False,
+            bruker_fixture, output_directory=output_directory, precision_mode="high", select_msn=False
         )
 
         assert first.ms1_path == second.ms1_path
@@ -196,8 +165,4 @@ class TestBrukerExtractor:
             connection.commit()
 
         with pytest.raises(RuntimeError, match="Frames is missing"):
-            BrukerExtractor().extract(
-                bruker_fixture,
-                output_directory=tmp_path / "invalid",
-                select_msn=False,
-            )
+            BrukerExtractor().extract(bruker_fixture, output_directory=tmp_path / "invalid", select_msn=False)

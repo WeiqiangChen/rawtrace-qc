@@ -37,11 +37,7 @@ def test_filter_candidates_uses_include_or_and_exclude_wins(tmp_path: Path) -> N
 
     filtered = filter_candidates(candidates, patterns)
 
-    assert [item.candidate.path.name for item in filtered] == [
-        "sample-a.raw",
-        "sample-b.raw",
-        "blank.raw",
-    ]
+    assert [item.candidate.path.name for item in filtered] == ["sample-a.raw", "sample-b.raw", "blank.raw"]
     assert [item.included for item in filtered] == [True, True, False]
     assert filtered[-1].matched_pattern_names == ("blank",)
 
@@ -73,10 +69,7 @@ def test_gui_settings_round_trip(tmp_path: Path) -> None:
 
 def test_gui_settings_loads_legacy_discovery_units(tmp_path: Path) -> None:
     config_path = tmp_path / "config.json"
-    config_path.write_text(
-        '{"discovery": {"min_size_bytes": 2097152, "min_age_seconds": 90}}',
-        encoding="utf-8",
-    )
+    config_path.write_text('{"discovery": {"min_size_bytes": 2097152, "min_age_seconds": 90}}', encoding="utf-8")
 
     loaded = load_settings(config_path)
 
@@ -84,15 +77,9 @@ def test_gui_settings_loads_legacy_discovery_units(tmp_path: Path) -> None:
     assert loaded.min_age_minutes == 1.5
 
 
-def test_gui_defaults_use_platformdirs_appdata(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_gui_defaults_use_platformdirs_appdata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     appdata = tmp_path / "appdata"
-    monkeypatch.setattr(
-        "rawtrace_qc.paths.user_data_dir",
-        lambda **_kwargs: str(appdata),
-    )
+    monkeypatch.setattr("rawtrace_qc.paths.user_data_dir", lambda **_kwargs: str(appdata))
 
     settings = GuiSettings()
 
@@ -102,15 +89,9 @@ def test_gui_defaults_use_platformdirs_appdata(
     assert settings.report_directory == appdata / "reports"
 
 
-def test_save_settings_creates_the_default_appdata_config(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_save_settings_creates_the_default_appdata_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     appdata = tmp_path / "appdata"
-    monkeypatch.setattr(
-        "rawtrace_qc.paths.user_data_dir",
-        lambda **_kwargs: str(appdata),
-    )
+    monkeypatch.setattr("rawtrace_qc.paths.user_data_dir", lambda **_kwargs: str(appdata))
 
     saved_path = save_settings(GuiSettings())
 
@@ -118,12 +99,10 @@ def test_save_settings_creates_the_default_appdata_config(
     assert saved_path.is_file()
 
 
-def test_selection_validates_paths_and_keeps_unique_active_entries(
-    tmp_path: Path,
-) -> None:
+def test_selection_validates_paths_and_keeps_unique_active_entries(tmp_path: Path) -> None:
     raw = tmp_path / "sample.raw"
     raw.write_bytes(b"raw")
-    selection = RawFileSelection(DiscoveryOptions(min_size_bytes=1, min_age_seconds=0, clock=lambda: 10_000_000_000.0))
+    selection = RawFileSelection(DiscoveryOptions(min_size_bytes=1, min_age_seconds=0))
 
     first = selection.add_paths((raw, raw))
     second = selection.add_paths((tmp_path / "invalid.txt",))
@@ -137,10 +116,7 @@ def test_selection_validates_paths_and_keeps_unique_active_entries(
 
 
 def test_selection_promotes_only_checked_included_candidates(tmp_path: Path) -> None:
-    candidates = (
-        _candidate(tmp_path, "sample.raw"),
-        _candidate(tmp_path, "blank.raw"),
-    )
+    candidates = (_candidate(tmp_path, "sample.raw"), _candidate(tmp_path, "blank.raw"))
     selection = RawFileSelection()
     selection.set_candidates(candidates)
     selection.apply_patterns((FilenamePattern("samples", "sample", PatternMode.INCLUDE),))

@@ -15,11 +15,7 @@ from rawtrace_qc.processing import (
 from rawtrace_qc.traces import TraceArtifact
 
 
-def _metadata(
-    *,
-    row_granularity: str = "spectrum",
-    ms_level_file: str = "msn",
-) -> dict[str, str]:
+def _metadata(*, row_granularity: str = "spectrum", ms_level_file: str = "msn") -> dict[str, str]:
     return {
         "schema_version": "1",
         "generator": "test/1.0",
@@ -34,11 +30,7 @@ def _metadata(
     }
 
 
-def _artifact(
-    *,
-    table: pa.Table | None = None,
-    metadata: dict[str, str] | None = None,
-) -> TraceArtifact:
+def _artifact(*, table: pa.Table | None = None, metadata: dict[str, str] | None = None) -> TraceArtifact:
     if table is None:
         table = pa.table(
             {
@@ -49,11 +41,7 @@ def _artifact(
                 "base_peak_intensity": pa.array([1.0, 2.0, 3.0, 4.0]),
             }
         )
-    return TraceArtifact(
-        path=Path("generated-name.ms1-trace.parquet"),
-        table=table,
-        metadata=metadata or _metadata(),
-    )
+    return TraceArtifact(path=Path("generated-name.ms1-trace.parquet"), table=table, metadata=metadata or _metadata())
 
 
 class TestProcessingOptions:
@@ -95,15 +83,8 @@ class TestProcessTraces:
         assert processed[0].metadata.row_granularity == "spectrum"
         assert processed[0].metadata.time_unit == "min"
         assert processed[0].metadata.precision == "low"
-        assert processed[0].metadata.channels == (
-            "total_ion_current",
-            "base_peak_intensity",
-        )
-        assert processed[0].table.column_names == [
-            "retention_time_min",
-            "total_ion_current",
-            "base_peak_intensity",
-        ]
+        assert processed[0].metadata.channels == ("total_ion_current", "base_peak_intensity")
+        assert processed[0].table.column_names == ["retention_time_min", "total_ion_current", "base_peak_intensity"]
         assert processed[0].table["retention_time_min"].to_pylist() == [0.5, 1.5]
         assert "scan_id" not in processed[0].table.column_names
         assert "ms_level" not in processed[0].table.column_names
@@ -142,26 +123,17 @@ class TestProcessTraces:
 
         processed = process_traces([_artifact(table=table)])
 
-        assert [(item.metadata.ms_level, item.metadata.faims_cv) for item in processed] == [
-            (2, -60.0),
-            (2, -50.0),
-        ]
+        assert [(item.metadata.ms_level, item.metadata.faims_cv) for item in processed] == [(2, -60.0), (2, -50.0)]
         assert all("faims_cv" not in item.table.column_names for item in processed)
 
     def test_combined_faims_is_not_implemented(self) -> None:
         table = _artifact().table.append_column("faims_cv", pa.array([-50.0, -50.0, -60.0, -60.0]))
 
         with pytest.raises(NotImplementedError, match="combined processing"):
-            process_traces(
-                [_artifact(table=table)],
-                options=ProcessingOptions(faims_mode=FaimsProcessingMode.COMBINED),
-            )
+            process_traces([_artifact(table=table)], options=ProcessingOptions(faims_mode=FaimsProcessingMode.COMBINED))
 
     def test_combined_mode_is_ignored_for_non_faims_tables(self) -> None:
-        processed = process_traces(
-            [_artifact()],
-            options=ProcessingOptions(faims_mode=FaimsProcessingMode.COMBINED),
-        )
+        processed = process_traces([_artifact()], options=ProcessingOptions(faims_mode=FaimsProcessingMode.COMBINED))
 
         assert len(processed) == 1
         assert processed[0].metadata.faims_cv is None
@@ -176,10 +148,7 @@ class TestProcessTraces:
             }
         )
 
-        processed = process_traces(
-            [_artifact(table=table)],
-            options=ProcessingOptions(minimum_faims_percentage=40),
-        )
+        processed = process_traces([_artifact(table=table)], options=ProcessingOptions(minimum_faims_percentage=40))
 
         assert [(item.metadata.ms_level, item.metadata.faims_cv) for item in processed] == [(2, -50.0)]
 
@@ -195,10 +164,7 @@ class TestProcessTraces:
         processed = process_traces([_artifact(table=table)])
 
         assert processed[0].metadata.channels == ("total_ion_current",)
-        assert processed[0].table.column_names == [
-            "retention_time_min",
-            "total_ion_current",
-        ]
+        assert processed[0].table.column_names == ["retention_time_min", "total_ion_current"]
 
     def test_invalid_artifact_input_raises_processing_error(self) -> None:
         with pytest.raises(ProcessingError, match="expects TraceArtifact"):
