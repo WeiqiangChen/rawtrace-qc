@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
-from rawtrace_qc import paths
+from rawtrace_qc import environment
 from rawtrace_qc.errors import (
     ThermoHelperLicenseError,
     ThermoHelperNotFoundError,
@@ -129,7 +129,7 @@ def get_thermo_helper_status(
     Returns:
         A `ThermoHelperStatus` instance describing the helper state.
     """
-    current_platform = paths.get_platform()
+    current_platform = environment.get_platform()
     if current_platform != "win32":
         return ThermoHelperStatus(
             state=ThermoHelperState.UNSUPPORTED_PLATFORM,
@@ -155,7 +155,7 @@ def get_thermo_helper_status(
         if explicit_path is not None:
             searched_paths.append(str(Path(explicit_path).expanduser()))
         managed_path = (
-            paths.helper_tool_directory(
+            environment.helper_tool_directory(
                 specification.tool_name,
                 specification.version,
                 data_directory=data_directory,
@@ -274,7 +274,7 @@ def find_thermo_helper_path(
                 return candidate.resolve()
 
     managed_path = (
-        paths.helper_tool_directory(
+        environment.helper_tool_directory(
             specification.tool_name,
             specification.version,
             data_directory=data_directory,

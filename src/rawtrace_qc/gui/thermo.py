@@ -9,9 +9,9 @@ from urllib.error import URLError
 from urllib.request import urlopen
 from zipfile import BadZipFile, ZipFile
 
+from rawtrace_qc.environment import helper_tool_directory
 from rawtrace_qc.errors import ConfigurationError
 from rawtrace_qc.gui.config import ThermoToolSettings
-from rawtrace_qc.paths import helper_tool_directory
 from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 
 

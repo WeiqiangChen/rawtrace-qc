@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from rawtrace_qc.paths import default_data_directory, helper_tool_directory
+from rawtrace_qc.environment import default_data_directory, helper_tool_directory
 
 
 class TestDefaultDataDirectory:
@@ -14,7 +14,7 @@ class TestDefaultDataDirectory:
     ) -> None:
         explicit_path = tmp_path / "explicit-data"
         platform_path = tmp_path / "platform-data"
-        monkeypatch.setattr("rawtrace_qc.paths.user_data_dir", lambda **_kwargs: str(platform_path))
+        monkeypatch.setattr("rawtrace_qc.environment.user_data_dir", lambda **_kwargs: str(platform_path))
 
         assert default_data_directory() == platform_path
         assert default_data_directory(explicit_path) == explicit_path
@@ -31,7 +31,7 @@ class TestDefaultDataDirectory:
             calls.append(kwargs)
             return str(platform_path)
 
-        monkeypatch.setattr("rawtrace_qc.paths.user_data_dir", platformdirs_path)
+        monkeypatch.setattr("rawtrace_qc.environment.user_data_dir", platformdirs_path)
 
         assert default_data_directory() == platform_path
         assert calls == [{"appname": "rawtrace-qc", "appauthor": "perutzms", "roaming": False}]

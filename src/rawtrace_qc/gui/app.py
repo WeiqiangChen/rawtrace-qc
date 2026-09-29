@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from rawtrace_qc.discovery import DiscoveryScope
+from rawtrace_qc.environment import default_data_directory
 from rawtrace_qc.errors import ConfigurationError, DiscoveryError
 from rawtrace_qc.gui.cache import TraceCache
 from rawtrace_qc.gui.config import (
@@ -26,7 +27,6 @@ from rawtrace_qc.gui.reporting import (
     generate_report,
 )
 from rawtrace_qc.gui.workflow import RawFileSelection
-from rawtrace_qc.paths import default_data_directory
 from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 
 

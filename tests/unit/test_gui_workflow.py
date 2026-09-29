@@ -79,7 +79,7 @@ def test_gui_settings_loads_legacy_discovery_units(tmp_path: Path) -> None:
 
 def test_gui_defaults_use_platformdirs_appdata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     appdata = tmp_path / "appdata"
-    monkeypatch.setattr("rawtrace_qc.paths.user_data_dir", lambda **_kwargs: str(appdata))
+    monkeypatch.setattr("rawtrace_qc.environment.user_data_dir", lambda **_kwargs: str(appdata))
 
     settings = GuiSettings()
 
@@ -91,7 +91,7 @@ def test_gui_defaults_use_platformdirs_appdata(tmp_path: Path, monkeypatch: pyte
 
 def test_save_settings_creates_the_default_appdata_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     appdata = tmp_path / "appdata"
-    monkeypatch.setattr("rawtrace_qc.paths.user_data_dir", lambda **_kwargs: str(appdata))
+    monkeypatch.setattr("rawtrace_qc.environment.user_data_dir", lambda **_kwargs: str(appdata))
 
     saved_path = save_settings(GuiSettings())
 

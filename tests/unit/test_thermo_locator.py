@@ -5,14 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from rawtrace_qc import paths
+from rawtrace_qc import environment
+from rawtrace_qc.environment import helper_tool_directory
 from rawtrace_qc.errors import (
     ThermoHelperLicenseError,
     ThermoHelperNotFoundError,
     ThermoHelperVersionError,
     UnsupportedPlatformError,
 )
-from rawtrace_qc.paths import helper_tool_directory
 from rawtrace_qc.thermo import (
     THERMO_HELPER_SPECIFICATION,
     THERMO_LICENSE_MARKER_NAME,
@@ -29,7 +29,7 @@ from tests.support.mock_helper import MockThermoHelper, create_mock_helper_file
 
 @pytest.fixture(autouse=True)
 def mock_windows_platform(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(paths, "get_platform", lambda: "win32")
+    monkeypatch.setattr(environment, "get_platform", lambda: "win32")
 
 
 class TestFindThermoHelperPath:
@@ -104,7 +104,7 @@ class TestGetThermoHelperStatus:
     ) -> None:
         mock_runner = MockThermoHelper()
         monkeypatch.setattr("rawtrace_qc.thermo.locator.execute_helper_process", mock_runner)
-        monkeypatch.setattr(paths, "get_platform", lambda: "linux")
+        monkeypatch.setattr(environment, "get_platform", lambda: "linux")
 
         status = get_thermo_helper_status()
 
@@ -243,7 +243,7 @@ class TestGetThermoHelperStatus:
 
 class TestLocateThermoHelper:
     def test_raises_unsupported_platform_error_on_non_windows(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(paths, "get_platform", lambda: "darwin")
+        monkeypatch.setattr(environment, "get_platform", lambda: "darwin")
         with pytest.raises(UnsupportedPlatformError, match="requires Windows"):
             locate_thermo_helper()
 

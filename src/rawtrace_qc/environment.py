@@ -1,4 +1,4 @@
-"""GUI-independent application data paths for rawtrace-qc."""
+"""Environment and application data paths for rawtrace-qc."""
 
 from __future__ import annotations
 

@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from rawtrace_qc.discovery import DiscoveryOptions, DiscoveryScope
+from rawtrace_qc.environment import default_data_directory
 from rawtrace_qc.errors import ConfigurationError
 from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode
-from rawtrace_qc.paths import default_data_directory
 
 
 @dataclass(frozen=True, slots=True)

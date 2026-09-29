@@ -60,7 +60,7 @@ class TestThermoToolManager:
     ) -> None:
         data_directory = tmp_path / "appdata"
         monkeypatch.setattr(
-            "rawtrace_qc.paths.user_data_dir",
+            "rawtrace_qc.environment.user_data_dir",
             lambda **_kwargs: str(data_directory),
         )
 
