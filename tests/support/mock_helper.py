@@ -26,6 +26,10 @@ class MockThermoHelper:
     stderr: str = ""
     hang: bool = False
     os_error: OSError | None = None
+    license_text: str = "Mock Thermo license terms.\n"
+    license_text_exit_code: int | None = None
+    agreement_exit_code: int | None = None
+    writes_license_marker: bool = True
     commands_run: list[list[str]] = field(default_factory=list)
 
     def __call__(self, args: Sequence[str | Path], *, timeout: float = 10.0) -> subprocess.CompletedProcess[str]:
@@ -39,27 +43,42 @@ class MockThermoHelper:
         if self.hang:
             raise subprocess.TimeoutExpired(cmd=str_args, timeout=timeout)
 
-        if self.exit_code != 0:
+        command_exit_code = self.exit_code
+        if "--thermo-license" in str_args and self.license_text_exit_code is not None:
+            command_exit_code = self.license_text_exit_code
+        elif "--agree-to-terms" in str_args and self.agreement_exit_code is not None:
+            command_exit_code = self.agreement_exit_code
+
+        stdout = self.stdout
+        if stdout is None and command_exit_code == 0:
+            if "--version" in str_args:
+                stdout = f"{self.version}\n"
+            elif "--thermo-license" in str_args:
+                stdout = self.license_text
+            elif "--agree-to-terms" in str_args:
+                stdout = "Terms accepted.\n"
+            else:
+                stdout = ""
+
+        if command_exit_code != 0:
             return subprocess.CompletedProcess(
                 args=str_args,
-                returncode=self.exit_code,
-                stdout=self.stdout or "",
-                stderr=self.stderr or f"Process failed with exit code {self.exit_code}.",
+                returncode=command_exit_code,
+                stdout=stdout or "",
+                stderr=self.stderr or f"Process failed with exit code {command_exit_code}.",
             )
 
-        if self.stdout is not None:
-            return subprocess.CompletedProcess(args=str_args, returncode=0, stdout=self.stdout, stderr=self.stderr)
-
-        if "--version" in str_args:
-            return subprocess.CompletedProcess(args=str_args, returncode=0, stdout=f"{self.version}\n", stderr="")
-
-        if "--agree-to-terms" in str_args:
+        if "--agree-to-terms" in str_args and self.writes_license_marker:
             exe_path = Path(str_args[0])
             marker = exe_path.parent / THERMO_LICENSE_MARKER_NAME
             marker.write_text("license accepted\n", encoding="utf-8")
-            return subprocess.CompletedProcess(args=str_args, returncode=0, stdout="Terms accepted.\n", stderr="")
 
-        return subprocess.CompletedProcess(args=str_args, returncode=0, stdout="", stderr="")
+        return subprocess.CompletedProcess(
+            args=str_args,
+            returncode=0,
+            stdout=stdout or "",
+            stderr=self.stderr,
+        )
 
 
 def create_mock_helper_file(
@@ -92,6 +111,9 @@ if __name__ == "__main__":
         marker = Path(sys.argv[0]).resolve().parent / THERMO_LICENSE_MARKER_NAME
         marker.write_text("accepted\n", encoding="utf-8")
         sys.stdout.write("License terms accepted.\n")
+        sys.exit(0)
+    elif "--thermo-license" in sys.argv:
+        sys.stdout.write("Mock Thermo license terms.\n")
         sys.exit(0)
     else:
         sys.stderr.write("Unknown command\n")

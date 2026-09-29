@@ -6,6 +6,10 @@ from rawtrace_qc.thermo.installation import (
     install_thermo_helper,
     verify_thermo_helper_archive,
 )
+from rawtrace_qc.thermo.license import (
+    accept_thermo_license,
+    get_thermo_license_text,
+)
 from rawtrace_qc.thermo.locator import (
     ThermoHelperState,
     ThermoHelperStatus,
@@ -31,11 +35,13 @@ __all__ = [
     "ThermoHelperSpecification",
     "ThermoHelperState",
     "ThermoHelperStatus",
+    "accept_thermo_license",
     "download_thermo_helper_archive",
     "extract_thermo_helper_archive",
     "execute_helper_process",
     "find_thermo_helper_path",
     "get_thermo_helper_status",
+    "get_thermo_license_text",
     "is_license_accepted",
     "install_thermo_helper",
     "locate_thermo_helper",
