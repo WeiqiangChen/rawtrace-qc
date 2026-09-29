@@ -115,6 +115,17 @@ def test_selection_validates_paths_and_keeps_unique_active_entries(tmp_path: Pat
     assert selection.active_selected() == (first.accepted[0],)
 
 
+def test_selection_accepts_zero_age_files_when_clock_lags_file_mtime(tmp_path: Path) -> None:
+    raw = tmp_path / "sample.raw"
+    raw.write_bytes(b"raw")
+    selection = RawFileSelection(DiscoveryOptions(min_size_bytes=1, min_age_seconds=0, clock=lambda: 0))
+
+    result = selection.add_paths((raw,))
+
+    assert result.accepted[0].path == raw.absolute()
+    assert result.rejected == ()
+
+
 def test_selection_promotes_only_checked_included_candidates(tmp_path: Path) -> None:
     candidates = (_candidate(tmp_path, "sample.raw"), _candidate(tmp_path, "blank.raw"))
     selection = RawFileSelection()

@@ -85,8 +85,14 @@ def _valid_file(
         stat.S_ISREG(metadata.st_mode)
         and metadata.st_size > 0
         and metadata.st_size >= min_size_bytes
-        and now - metadata.st_mtime >= min_age_seconds
+        and _meets_age_threshold(metadata.st_mtime, min_age_seconds, now)
     )
+
+
+def _meets_age_threshold(
+    modified_at: float, min_age_seconds: float, now: float
+) -> bool:
+    return min_age_seconds == 0 or now - modified_at >= min_age_seconds
 
 
 def _valid_bruker_directory(
@@ -117,6 +123,6 @@ def _valid_bruker_directory(
             has_complete_tdf_bin = has_complete_tdf_bin or (
                 member_metadata.st_size > 0
                 and member_metadata.st_size >= min_size_bytes
-                and now - member_metadata.st_mtime >= min_age_seconds
+                and _meets_age_threshold(member_metadata.st_mtime, min_age_seconds, now)
             )
     return has_tdf and has_complete_tdf_bin
