@@ -1,5 +1,11 @@
 """Thermo helper release metadata and integration support."""
 
+from rawtrace_qc.thermo.installation import (
+    download_thermo_helper_archive,
+    extract_thermo_helper_archive,
+    install_thermo_helper,
+    verify_thermo_helper_archive,
+)
 from rawtrace_qc.thermo.locator import (
     ThermoHelperState,
     ThermoHelperStatus,
@@ -25,11 +31,15 @@ __all__ = [
     "ThermoHelperSpecification",
     "ThermoHelperState",
     "ThermoHelperStatus",
+    "download_thermo_helper_archive",
+    "extract_thermo_helper_archive",
     "execute_helper_process",
     "find_thermo_helper_path",
     "get_thermo_helper_status",
     "is_license_accepted",
+    "install_thermo_helper",
     "locate_thermo_helper",
     "query_helper_version",
     "verify_helper_version",
+    "verify_thermo_helper_archive",
 ]

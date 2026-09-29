@@ -120,6 +120,21 @@ Thermo `.raw` scan-header extraction relies on an external Windows command-line 
 
 The expected helper release is pinned in `rawtrace_qc.thermo.THERMO_HELPER_SPECIFICATION`. This specification defines the exact expected release version (`0.1.0`), asset archive name, official download URL, SHA-256 checksum digest, and executable name (`ThermoScanHeaderExtractor.exe`).
 
+### Install the Helper
+
+Call `install_thermo_helper()` to download and install the pinned release. For offline or restricted environments, pass a local ZIP archive instead:
+
+```python
+from pathlib import Path
+
+from rawtrace_qc.thermo import install_thermo_helper
+
+executable = install_thermo_helper()
+# Or install_thermo_helper(Path("/media/helper/ThermoScanHeaderExtractor-v0.1.0-win-x64.zip"))
+```
+
+Both sources are checked against the pinned SHA-256 digest before extraction and installed through a temporary staging directory. The completed helper is atomically moved to `<user_data_dir>/tools/thermoscanheaderextractor/<version>/ThermoScanHeaderExtractor.exe`. Reinstalling the same archive is safe; an existing directory that does not match the pinned installation is left untouched and causes an installation conflict. Installation never executes the helper or accepts the Thermo license; use the helper's explicit `--agree-to-terms` command separately after reviewing the agreement.
+
 ### Helper Locating and Resolution Priority
 
 The library locates the helper without side effects, searching in strict priority order:

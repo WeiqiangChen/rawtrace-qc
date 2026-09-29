@@ -45,3 +45,23 @@ class ThermoHelperVersionError(ThermoHelperError):
 
 class ThermoHelperLicenseError(ThermoHelperError):
     """Raise when the Thermo license agreement has not been accepted."""
+
+
+class ThermoHelperInstallationError(ThermoHelperError):
+    """Raise when the Thermo helper cannot be installed safely."""
+
+
+class ThermoHelperDownloadError(ThermoHelperInstallationError):
+    """Raise when the pinned Thermo helper archive cannot be downloaded."""
+
+
+class ThermoHelperChecksumError(ThermoHelperInstallationError):
+    """Raise when a Thermo helper archive does not match its pinned checksum."""
+
+
+class ThermoHelperArchiveError(ThermoHelperInstallationError):
+    """Raise when a Thermo helper archive is invalid or unsafe to extract."""
+
+
+class ThermoHelperInstallConflictError(ThermoHelperInstallationError):
+    """Raise when an existing helper install conflicts with the pinned release."""
