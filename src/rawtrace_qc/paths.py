@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from platformdirs import user_data_dir
 
 _APP_NAME = "rawtrace-qc"
 _APP_AUTHOR = "perutzms"
+
+
+def get_platform() -> str:
+    """Return the current Python platform identifier."""
+    return sys.platform
 
 
 def default_data_directory(override: Path | str | None = None) -> Path:

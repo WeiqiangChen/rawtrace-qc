@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from rawtrace_qc import paths
 from rawtrace_qc.errors import (
     ThermoHelperLicenseError,
     ThermoHelperNotFoundError,
     ThermoHelperVersionError,
     UnsupportedPlatformError,
 )
-from rawtrace_qc.paths import helper_tool_directory
 from rawtrace_qc.thermo.specification import (
     THERMO_HELPER_SPECIFICATION,
     THERMO_LICENSE_MARKER_NAME,
@@ -55,7 +54,6 @@ def locate_thermo_helper(
     *,
     data_directory: Path | str | None = None,
     specification: ThermoHelperSpecification = THERMO_HELPER_SPECIFICATION,
-    platform: str = sys.platform,
 ) -> Path:
     """Locate and return a usable ThermoScanHeaderExtractor executable.
 
@@ -71,8 +69,6 @@ def locate_thermo_helper(
             platform default user data directory.
         specification: Release specification. Defaults to
             `THERMO_HELPER_SPECIFICATION`.
-        platform: Operating system platform. Defaults to `sys.platform`.
-
     Returns:
         The validated Path to the usable ThermoScanHeaderExtractor executable.
 
@@ -91,17 +87,10 @@ def locate_thermo_helper(
         print(f"Using helper at: {executable}")
         ```
     """
-    if platform != "win32":
-        raise UnsupportedPlatformError(
-            f"ThermoScanHeaderExtractor requires Windows, but current platform is "
-            f"{platform!r}. Thermo .raw extraction is only supported on Windows."
-        )
-
     status = get_thermo_helper_status(
         explicit_path,
         data_directory=data_directory,
         specification=specification,
-        platform=platform,
     )
 
     if status.state is ThermoHelperState.NOT_INSTALLED:
@@ -124,7 +113,6 @@ def get_thermo_helper_status(
     *,
     data_directory: Path | str | None = None,
     specification: ThermoHelperSpecification = THERMO_HELPER_SPECIFICATION,
-    platform: str = sys.platform,
 ) -> ThermoHelperStatus:
     """Inspect the status of ThermoScanHeaderExtractor without side effects.
 
@@ -138,12 +126,11 @@ def get_thermo_helper_status(
             platform default user data directory.
         specification: Release specification. Defaults to
             `THERMO_HELPER_SPECIFICATION`.
-        platform: Operating system platform. Defaults to `sys.platform`.
-
     Returns:
         A `ThermoHelperStatus` instance describing the helper state.
     """
-    if platform != "win32":
+    current_platform = paths.get_platform()
+    if current_platform != "win32":
         return ThermoHelperStatus(
             state=ThermoHelperState.UNSUPPORTED_PLATFORM,
             path=None,
@@ -151,7 +138,8 @@ def get_thermo_helper_status(
             license_accepted=False,
             message=(
                 f"ThermoScanHeaderExtractor requires Windows, but current platform is "
-                f"{platform!r}. Thermo .raw extraction is only supported on Windows."
+                f"{current_platform!r}. Thermo .raw extraction is only "
+                "supported on Windows."
             ),
             expected_version=specification.version,
         )
@@ -167,7 +155,7 @@ def get_thermo_helper_status(
         if explicit_path is not None:
             searched_paths.append(str(Path(explicit_path).expanduser()))
         managed_path = (
-            helper_tool_directory(
+            paths.helper_tool_directory(
                 specification.tool_name,
                 specification.version,
                 data_directory=data_directory,
@@ -286,7 +274,7 @@ def find_thermo_helper_path(
                 return candidate.resolve()
 
     managed_path = (
-        helper_tool_directory(
+        paths.helper_tool_directory(
             specification.tool_name,
             specification.version,
             data_directory=data_directory,
