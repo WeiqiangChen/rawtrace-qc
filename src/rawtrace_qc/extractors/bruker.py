@@ -12,6 +12,7 @@ from typing import Literal
 import numpy as np
 import pyarrow as pa
 
+from rawtrace_qc.extractors.common import validate_extraction_options
 from rawtrace_qc.models import ExtractionResult
 from rawtrace_qc.traces import write_trace
 
@@ -84,8 +85,14 @@ class BrukerExtractor:
             RuntimeError: If an explicitly MSn-only selection has no MSn frames,
                 or required frame data cannot form a valid table.
         """
-        _validate_options(input_path, output_name, precision_mode)
-        resolved_input = input_path.expanduser().resolve()
+        resolved_input = validate_extraction_options(
+            input_path,
+            output_name,
+            precision_mode,
+            expected_extension=".d",
+            vendor_label="Bruker",
+            expect_dir=True,
+        )
         tdf_path = resolved_input / "analysis.tdf"
         if not tdf_path.is_file():
             raise FileNotFoundError(f"analysis.tdf not found in {resolved_input}")
@@ -357,20 +364,6 @@ class BrukerExtractor:
         )
 
 
-def _validate_options(
-    input_path: Path, output_name: str | None, precision_mode: str
-) -> None:
-    if precision_mode not in {"low", "high"}:
-        raise ValueError("precision_mode must be 'low' or 'high'.")
-    resolved_input = input_path.expanduser().resolve()
-    if resolved_input.suffix.casefold() != ".d" or not resolved_input.is_dir():
-        raise ValueError(f"Expected a Bruker .d directory, got: {resolved_input}")
-    if output_name is not None and not _is_output_name(output_name):
-        raise ValueError(
-            "output_name must be a non-empty valid file name without path separators."
-        )
-
-
 def _integer_value(value: int | float | str) -> int:
     number = float(value)
     if not np.isfinite(number) or not number.is_integer():
@@ -405,9 +398,3 @@ def _package_version() -> str:
         return importlib.metadata.version("rawtrace-qc")
     except importlib.metadata.PackageNotFoundError:
         return "unknown"
-
-
-def _is_output_name(output_name: str) -> bool:
-    return bool(output_name.strip()) and not any(
-        character in output_name for character in '\\/:*?"<>|'
-    )

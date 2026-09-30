@@ -54,16 +54,20 @@ def load_trace(path: Path, *, strict: bool = True) -> TraceArtifact:
         raise ArtifactValidationError(f"Scan-trace file not found: {resolved_path}")
 
     try:
-        parquet_file = pq.ParquetFile(resolved_path)
-        table = parquet_file.read()
+        with pa.OSFile(str(resolved_path), "rb") as source:
+            parquet_file = pq.ParquetFile(source)
+            try:
+                table = parquet_file.read()
+                metadata = _decode_metadata(table.schema.metadata)
+                validate_trace(table, metadata, strict=strict)
+                _validate_compression(parquet_file)
+            finally:
+                parquet_file.close()
     except (OSError, pa.ArrowException) as error:
         raise ArtifactValidationError(
             f"Could not read scan-trace Parquet file {resolved_path}: {error}"
         ) from error
 
-    metadata = _decode_metadata(table.schema.metadata)
-    validate_trace(table, metadata, strict=strict)
-    _validate_compression(parquet_file)
     return TraceArtifact(resolved_path, table, metadata)
 
 

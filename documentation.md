@@ -4,7 +4,7 @@
 
 `rawtrace-qc` is a vendor-neutral Python library for discovering mass-spectrometry raw acquisitions, extracting scan-level traces, validating trace artifacts, and preparing interactive QC reports.
 
-The current implementation supports Bruker timsTOF `.d` discovery and scan-trace extraction, plus Thermo `.raw` discovery. Thermo extraction is deferred because it depends on an external C# helper.
+The current implementation supports Bruker timsTOF `.d` and Thermo `.raw` discovery and scan-trace extraction. Thermo extraction is powered by the external `ThermoScanHeaderExtractor` helper.
 
 The package is library-first. Applications such as a command-line tool or GUI should call the public library services rather than implement vendor-specific filesystem or processing logic themselves.
 
@@ -12,8 +12,9 @@ The package is library-first. Applications such as a command-line tool or GUI sh
 
 - [x] Vendor-aware raw-file discovery for Bruker timsTOF `.d` directories and Thermo `.raw` files
 - [x] Bruker scan-trace extraction
-- [ ] Thermo scan-trace extraction
+- [x] Thermo scan-trace extraction
 - [x] Scan-trace validation
+
 - [x] Scan-trace processing
     - [ ] FAIMS "combined" mode
     - [ ] Optimize dtype and precision for compact HTML serialization
@@ -26,7 +27,8 @@ The package is library-first. Applications such as a command-line tool or GUI sh
 
 The public library is organized around services that can be used by any application. Applications should provide input directories and options, call the relevant service, and present the returned models to users. Filesystem traversal, vendor recognition, validation, and error handling belong in the library.
 
-The public services currently include `rawtrace_qc.discovery.discover`, `rawtrace_qc.extractors.BrukerExtractor`, Thermo helper locating and status services in `rawtrace_qc.thermo`, and the trace artifact functions in `rawtrace_qc.traces`. Later processing and reporting services will follow the same pattern and remain independent of any particular application interface.
+The public services currently include `rawtrace_qc.discovery.discover`, `rawtrace_qc.extractors.BrukerExtractor`, `rawtrace_qc.extractors.ThermoExtractor`, Thermo helper locating and status services in `rawtrace_qc.thermo`, and the trace artifact functions in `rawtrace_qc.traces`. Later processing and reporting services will follow the same pattern and remain independent of any particular application interface.
+
 
 ## File Discovery
 
@@ -112,7 +114,34 @@ The extractor overwrites existing artifacts with the same destination path. It c
 
 Bruker extraction records `GlobalMetadata.AcquisitionDateTime` as the recommended `acquisition_start_time` metadata field, normalized to an ISO-8601 UTC timestamp and shared by the MS1 and MSn artifacts. It records `GlobalMetadata.AnalysisId` as the recommended `source_id` metadata field when present.
 
+### Thermo Extraction Example
+
+`ThermoExtractor.extract()` extracts compact scan-header metadata from Thermo `.raw` files by executing the external `ThermoScanHeaderExtractor` helper. It produces schema-v1 Snappy Parquet artifacts following the same naming convention (`<run-name>.ms1-trace.parquet` and `<run-name>.msn-trace.parquet`) and passes output through the same schema and trace validation.
+
+```python
+from pathlib import Path
+
+from rawtrace_qc.extractors import ThermoExtractor
+from rawtrace_qc.traces import load_trace
+
+extractor = ThermoExtractor()
+result = extractor.extract(
+	Path("/data/raw/sample.raw"),
+	output_directory=Path("/data/traces"),
+	precision_mode="low",
+)
+
+if result.ms1_path is not None:
+	ms1 = load_trace(result.ms1_path)
+	print(ms1.table.num_rows, ms1.metadata["vendor"])
+
+if result.msn_path is not None:
+	msn = load_trace(result.msn_path)
+	print(msn.table.num_rows, msn.metadata["row_granularity"])
+```
+
 ## Thermo Helper Integration (ThermoScanHeaderExtractor)
+
 
 Thermo `.raw` scan-header extraction relies on an external Windows command-line utility named `ThermoScanHeaderExtractor`. The library manages specification pinning, helper location, status inspection, and license verification.
 
@@ -133,7 +162,7 @@ executable = install_thermo_helper()
 # Or install_thermo_helper(Path("/media/helper/ThermoScanHeaderExtractor-v0.1.0-win-x64.zip"))
 ```
 
-Both sources are checked against the pinned SHA-256 digest before extraction and installed through a temporary staging directory. The completed helper is atomically moved to `<user_data_dir>/tools/thermoscanheaderextractor/<version>/ThermoScanHeaderExtractor.exe`. Reinstalling the same archive is safe; an existing directory that does not match the pinned installation is left untouched and causes an installation conflict. Installation never executes the helper or accepts the Thermo license; use the helper's explicit `--agree-to-terms` command separately after reviewing the agreement.
+Both sources are checked against the pinned SHA-256 digest before extraction and installed through a temporary staging directory. The completed helper is atomically moved to `<user_data_dir>/tools/thermoscanheaderextractor/<version>/ThermoScanHeaderExtractor.exe`. Reinstalling the same archive is safe; an existing directory that does not match the pinned installation is left untouched and causes an installation conflict. Installation never executes the helper or accepts the Thermo license. Review and record explicit agreement through the library API described below.
 
 ### Helper Locating and Resolution Priority
 
@@ -155,6 +184,20 @@ The status distinguishes at least:
 - `ThermoHelperState.UNLICENSED`: The helper is installed and its version matches, but the license agreement marker (`.thermo-license-accepted`) is missing beside the executable.
 - `ThermoHelperState.INVALID_VERSION`: The helper is installed but returned an unreadable version, crashed, timed out, or reported a version that does not match the pinned specification.
 - `ThermoHelperState.READY`: The helper is installed, matches the expected version, and has the license marker present beside the executable.
+
+### License Review and Acceptance
+
+Use `get_thermo_license_text()` to retrieve the agreement for display without accepting it or creating the license marker. After the user has reviewed the agreement and explicitly agreed to it, call `accept_thermo_license()`. This library function invokes the helper's `--agree-to-terms` command when acceptance has not already been recorded, then verifies that the helper created its license marker. Both functions use the prioritized helper locations by default and support an explicit helper path.
+
+```python
+from rawtrace_qc.thermo import accept_thermo_license, get_thermo_license_text
+
+license_text = get_thermo_license_text()
+print(license_text)
+
+# Call only after the user has reviewed and accepted the agreement.
+accept_thermo_license()
+```
 
 ### Locating a Usable Helper
 
@@ -291,7 +334,7 @@ GUI settings are stored as JSON in the platform user configuration directory. Th
 
 Reports can be temporary, in which case the GUI owns their temporary directories until it closes, or permanent, in which case the selected report directory is used. The default report uses embedded Plotly assets and can be opened immediately in the default browser.
 
-The GUI can locate an already configured ThermScanHeaderExtractor executable or download it from the configured HTTPS URL, verifying the optional SHA-256 digest. The project does not embed a release URL because the external helper's distribution and trust source are not defined here. The current repository also does not define the helper's command-line arguments or trace-output contract, so Bruker report generation is complete while a Thermo selection reports an actionable adapter-configuration error after helper resolution.
+The current GUI path uses `ThermoToolManager` to locate or download a helper, then reports that its extraction adapter is not configured. It is not yet wired to the library's `ThermoExtractor`, which uses the pinned helper specification and validates schema-v1 outputs. Thermo support in the GUI remains deferred to a later UI integration step.
 
 ## Developer Guide
 

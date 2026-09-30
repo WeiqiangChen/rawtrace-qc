@@ -16,6 +16,9 @@ build/
 htmlcov/
 .coverage
 
+# Test cache
+tests/.cache/
+
 # Editor / OS
 .DS_Store
 Thumbs.db

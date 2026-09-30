@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rawtrace_qc.errors import (
     ThermoHelperCommandError,
@@ -13,7 +14,9 @@ from rawtrace_qc.errors import (
     ThermoHelperOutputError,
     ThermoHelperTimeoutError,
 )
-from rawtrace_qc.extractors.protocol import PrecisionMode
+
+if TYPE_CHECKING:
+    from rawtrace_qc.extractors.protocol import PrecisionMode
 
 _DEFAULT_TIMEOUT = 600.0
 

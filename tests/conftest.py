@@ -4,11 +4,26 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+
 from tests.support.collection import tag_test_items
+from tests.support.thermo_helper import resolve_integration_thermo_helper
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     tag_test_items(items)
+
+
+@pytest.fixture(scope="session")
+def thermo_helper_executable() -> Path:
+    return resolve_integration_thermo_helper()
+
+
+@pytest.fixture
+def thermo_raw_fixture() -> Path:
+    fixture_path = Path(__file__).resolve().parent / "data" / "thermo" / "exploris480_ms1_dia_3cycles.raw"
+    if not fixture_path.is_file():
+        pytest.fail(f"Required Thermo test fixture not found: {fixture_path}")
+    return fixture_path
 
 
 @pytest.fixture
