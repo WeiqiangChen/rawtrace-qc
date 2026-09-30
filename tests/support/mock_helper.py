@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -104,7 +105,21 @@ def create_mock_helper_file(
 
 
 if __name__ == "__main__":
-    if "--version" in sys.argv:
+    if (
+        "--runner-test-success" in sys.argv
+        or "--runner-test-failure" in sys.argv
+        or "--runner-test-timeout" in sys.argv
+    ):
+        sys.stdout.write("mock helper stdout\n")
+        sys.stderr.write("mock helper stderr\n")
+        sys.stdout.flush()
+        sys.stderr.flush()
+        if "--runner-test-failure" in sys.argv:
+            sys.exit(7)
+        if "--runner-test-timeout" in sys.argv:
+            time.sleep(30)
+        sys.exit(0)
+    elif "--version" in sys.argv:
         sys.stdout.write(f"{THERMO_HELPER_SPECIFICATION.version}\n")
         sys.exit(0)
     elif "--agree-to-terms" in sys.argv:

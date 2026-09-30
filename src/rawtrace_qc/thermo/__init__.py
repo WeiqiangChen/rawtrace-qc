@@ -21,6 +21,10 @@ from rawtrace_qc.thermo.locator import (
     query_helper_version,
     verify_helper_version,
 )
+from rawtrace_qc.thermo.runner import (
+    build_thermo_helper_command,
+    run_thermo_helper,
+)
 from rawtrace_qc.thermo.specification import (
     THERMO_HELPER_NAME,
     THERMO_HELPER_SPECIFICATION,
@@ -36,6 +40,7 @@ __all__ = [
     "ThermoHelperState",
     "ThermoHelperStatus",
     "accept_thermo_license",
+    "build_thermo_helper_command",
     "download_thermo_helper_archive",
     "extract_thermo_helper_archive",
     "execute_helper_process",
@@ -46,6 +51,7 @@ __all__ = [
     "install_thermo_helper",
     "locate_thermo_helper",
     "query_helper_version",
+    "run_thermo_helper",
     "verify_helper_version",
     "verify_thermo_helper_archive",
 ]

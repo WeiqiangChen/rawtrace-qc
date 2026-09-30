@@ -31,6 +31,33 @@ class ThermoHelperError(RawtraceError):
     """Base class for ThermoScanHeaderExtractor helper errors."""
 
 
+class ThermoHelperExecutionError(ThermoHelperError):
+    """Raise when the Thermo helper process cannot be executed successfully."""
+
+    def __init__(self, message: str, *, stdout: str, stderr: str) -> None:
+        self.stdout = stdout
+        self.stderr = stderr
+        super().__init__(
+            f"{message} Captured stdout: {stdout!r}; captured stderr: {stderr!r}."
+        )
+
+
+class ThermoHelperCommandError(ThermoHelperExecutionError):
+    """Raise when the Thermo helper exits with a non-zero status."""
+
+
+class ThermoHelperTimeoutError(ThermoHelperExecutionError):
+    """Raise when the Thermo helper exceeds its execution timeout."""
+
+
+class ThermoHelperExecutableNotFoundError(ThermoHelperExecutionError):
+    """Raise when the requested Thermo helper executable cannot be started."""
+
+
+class ThermoHelperOutputError(ThermoHelperExecutionError):
+    """Raise when the Thermo helper output cannot be decoded as UTF-8."""
+
+
 class UnsupportedPlatformError(ThermoHelperError):
     """Raise when an operation is unsupported on the current operating system."""
 
