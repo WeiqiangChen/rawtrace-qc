@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -18,22 +17,15 @@ from rawtrace_qc.thermo import (
 )
 from tests.support.network import urlopen_or_skip
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("RAWTRACE_QC_RUN_THERMO_INSTALL_INTEGRATION") != "1",
-    reason=("set RAWTRACE_QC_RUN_THERMO_INSTALL_INTEGRATION=1 to download the helper and accept its license"),
-)
 
-
+@pytest.mark.network
 def test_downloads_installs_accepts_license_and_checks_version(tmp_path: Path) -> None:
     if environment.get_platform() != "win32":
         pytest.skip("ThermoScanHeaderExtractor integration requires Windows.")
 
     specification = THERMO_HELPER_SPECIFICATION
     data_directory = tmp_path / "app-data"
-    initial_status = get_thermo_helper_status(
-        data_directory=data_directory,
-        specification=specification,
-    )
+    initial_status = get_thermo_helper_status(data_directory=data_directory, specification=specification)
     assert initial_status.state is ThermoHelperState.NOT_INSTALLED
 
     with urlopen_or_skip(specification.download_url, timeout=60.0):
