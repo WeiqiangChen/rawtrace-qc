@@ -421,6 +421,8 @@ def execute_helper_process(
         str_args,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
         check=False,
     )
