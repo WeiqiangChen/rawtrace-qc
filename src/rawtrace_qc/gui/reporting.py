@@ -12,10 +12,9 @@ from typing import Literal
 
 from rawtrace_qc.discovery import DiscoveryCandidate, Vendor
 from rawtrace_qc.errors import ConfigurationError
-from rawtrace_qc.extractors import BrukerExtractor
+from rawtrace_qc.extractors import BrukerExtractor, ThermoExtractor
 from rawtrace_qc.gui.cache import TraceCache
 from rawtrace_qc.gui.config import ThermoToolSettings
-from rawtrace_qc.gui.thermo import ThermoToolManager
 from rawtrace_qc.processing import process_traces
 from rawtrace_qc.report import ReportOptions, write_html
 from rawtrace_qc.traces import load_trace
@@ -105,9 +104,9 @@ def generate_report(
 ) -> ReportGenerationResult:
     """Extract active candidates and write one combined HTML report.
 
-    Bruker candidates use the native extractor and cache. Thermo candidates
-    first resolve the pinned helper, then report that the vendor adapter still
-    needs its command/output contract instead of producing a partial report.
+    Bruker and Thermo candidates use their library extractors and the same cache.
+    Thermo extraction only locates and runs an installed, licensed helper; it
+    never installs the helper or accepts its license.
 
     Args:
         candidates: Active, validated raw acquisitions in report order.
@@ -124,7 +123,7 @@ def generate_report(
 
     Raises:
         ConfigurationError: If no candidates are active, a vendor is not
-            supported, or the pinned Thermo helper cannot be installed.
+            supported, or extraction produces no reportable artifacts.
     """
     selected_options = options or ReportGenerationOptions()
     selected_candidates = tuple(candidates)
@@ -137,28 +136,30 @@ def generate_report(
     cache_hits = 0
     for candidate in selected_candidates:
         if candidate.vendor == Vendor.BRUKER:
-            cached = cache.extract(
-                candidate,
-                BrukerExtractor(),
-                precision_mode=selected_options.precision_mode,
+            extractor = BrukerExtractor()
+        elif candidate.vendor == Vendor.THERMO:
+            extractor = ThermoExtractor(
+                helper_path=(
+                    thermo_settings.executable_path
+                    if thermo_settings is not None
+                    else None
+                )
             )
-            cache_hits += int(cached.cache_hit)
-            artifacts.extend(
-                load_trace(path)
-                for path in (cached.extraction.ms1_path, cached.extraction.msn_path)
-                if path is not None
-            )
-            continue
-        if candidate.vendor == Vendor.THERMO:
-            ThermoToolManager(
-                thermo_settings or ThermoToolSettings()
-            ).ensure_available()
+        else:
             raise ConfigurationError(
-                "ThermScanHeaderExtractor is installed, but its command and "
-                "trace-output adapter are not configured in rawtrace-qc yet."
+                f"No GUI extractor is registered for vendor {candidate.vendor!r}."
             )
-        raise ConfigurationError(
-            f"No GUI extractor is registered for vendor {candidate.vendor!r}."
+
+        cached = cache.extract(
+            candidate,
+            extractor,
+            precision_mode=selected_options.precision_mode,
+        )
+        cache_hits += int(cached.cache_hit)
+        artifacts.extend(
+            load_trace(path)
+            for path in (cached.extraction.ms1_path, cached.extraction.msn_path)
+            if path is not None
         )
 
     if not artifacts:
