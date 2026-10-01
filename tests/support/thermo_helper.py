@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
 import pytest
 from rawtrace_qc import environment
 from rawtrace_qc.errors import (
+    ThermoHelperArchiveError,
+    ThermoHelperChecksumError,
     ThermoHelperDownloadError,
     ThermoHelperLicenseError,
     ThermoHelperNotFoundError,
@@ -18,14 +21,69 @@ from rawtrace_qc.thermo import (
     ThermoHelperSpecification,
     ThermoHelperState,
     accept_thermo_license,
+    download_thermo_helper_archive,
     get_thermo_helper_status,
     install_thermo_helper,
+    verify_thermo_helper_archive,
 )
-
-from tests.support.collection import internet_reachable
 
 _TESTS_ROOT = Path(__file__).resolve().parents[1]
 TEST_HELPER_CACHE_DIR = _TESTS_ROOT / ".cache" / "thermo-helper"
+TEST_HELPER_ARCHIVE_CACHE_DIR = TEST_HELPER_CACHE_DIR / "archives"
+
+
+def get_or_download_thermo_helper_archive(
+    specification: ThermoHelperSpecification = THERMO_HELPER_SPECIFICATION,
+    cache_directory: Path = TEST_HELPER_ARCHIVE_CACHE_DIR,
+    timeout: float = 60.0,
+) -> Path:
+    """Return the verified helper archive from the shared test cache.
+
+    Missing or invalid cache entries are downloaded to a temporary sibling file,
+    verified against the pinned checksum, and atomically published. Transient
+    network failures skip the network-dependent test that requested the archive.
+
+    Args:
+        specification: Pinned helper release metadata. Defaults to
+            `THERMO_HELPER_SPECIFICATION`.
+        cache_directory: Directory for cached release archives. Defaults to
+            `tests/.cache/thermo-helper/archives`.
+        timeout: Maximum network timeout in seconds. Defaults to 60.0.
+
+    Returns:
+        The path to the verified cached archive.
+
+    Raises:
+        ThermoHelperArchiveError: If a downloaded archive cannot be read.
+        ThermoHelperChecksumError: If a downloaded archive fails checksum verification.
+        ThermoHelperDownloadError: If a non-transient failure prevents downloading.
+    """
+    archive_cache_directory = cache_directory.expanduser().resolve()
+    archive_path = archive_cache_directory / specification.asset_name
+
+    if archive_path.is_file():
+        try:
+            verify_thermo_helper_archive(archive_path, specification=specification)
+        except (ThermoHelperArchiveError, ThermoHelperChecksumError):
+            pass
+        else:
+            return archive_path
+
+    archive_cache_directory.mkdir(parents=True, exist_ok=True)
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix=".thermo-helper-download-", dir=archive_cache_directory
+        ) as temporary_directory:
+            staged_archive = Path(temporary_directory) / specification.asset_name
+            download_thermo_helper_archive(staged_archive, specification=specification, timeout=timeout)
+            verify_thermo_helper_archive(staged_archive, specification=specification)
+            staged_archive.replace(archive_path)
+    except ThermoHelperDownloadError as error:
+        if _is_transient_network_failure(error):
+            pytest.skip(f"Network or proxy prevented the Thermo helper archive download: {error}")
+        raise
+
+    return archive_path
 
 
 def resolve_integration_thermo_helper(
@@ -61,10 +119,7 @@ def resolve_integration_thermo_helper(
         return real_status.path
 
     cache_data_dir = cache_root.resolve()
-    cache_status = get_thermo_helper_status(
-        data_directory=cache_data_dir,
-        specification=specification,
-    )
+    cache_status = get_thermo_helper_status(data_directory=cache_data_dir, specification=specification)
 
     if cache_status.state is ThermoHelperState.INVALID_VERSION:
         raise ThermoHelperVersionError(cache_status.message)
@@ -72,40 +127,19 @@ def resolve_integration_thermo_helper(
         return cache_status.path
 
     if cache_status.state is ThermoHelperState.NOT_INSTALLED:
-        if not internet_reachable():
-            pytest.skip(
-                f"No usable Thermo helper found at real location and internet is "
-                f"unreachable to download to {cache_data_dir}."
-            )
-        try:
-            install_thermo_helper(
-                data_directory=cache_data_dir,
-                specification=specification,
-                timeout=60.0,
-            )
-        except ThermoHelperDownloadError as error:
-            if _is_transient_network_failure(error):
-                pytest.skip(f"Network or proxy prevented the Thermo helper download: {error}")
-            raise
-        cache_status = get_thermo_helper_status(
-            data_directory=cache_data_dir,
-            specification=specification,
+        archive_path = get_or_download_thermo_helper_archive(
+            specification=specification, cache_directory=cache_data_dir / "archives"
         )
+        install_thermo_helper(archive_path, data_directory=cache_data_dir, specification=specification, timeout=60.0)
+        cache_status = get_thermo_helper_status(data_directory=cache_data_dir, specification=specification)
         if cache_status.state is ThermoHelperState.INVALID_VERSION:
             raise ThermoHelperVersionError(cache_status.message)
 
     if cache_status.state is ThermoHelperState.UNLICENSED:
         if cache_status.path is None:
             raise ThermoHelperLicenseError(cache_status.message)
-        accept_thermo_license(
-            cache_status.path,
-            data_directory=cache_data_dir,
-            specification=specification,
-        )
-        cache_status = get_thermo_helper_status(
-            data_directory=cache_data_dir,
-            specification=specification,
-        )
+        accept_thermo_license(cache_status.path, data_directory=cache_data_dir, specification=specification)
+        cache_status = get_thermo_helper_status(data_directory=cache_data_dir, specification=specification)
 
     if cache_status.state is ThermoHelperState.READY and cache_status.path is not None:
         return cache_status.path

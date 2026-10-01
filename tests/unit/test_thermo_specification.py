@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
-
 import pytest
-from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
+from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION, verify_thermo_helper_archive
 from tests.support.network import urlopen_or_skip
+from tests.support.thermo_helper import get_or_download_thermo_helper_archive
 
 
 class TestThermoHelperSpecification:
@@ -25,10 +24,13 @@ class TestThermoHelperSpecification:
             assert response.status == 200
 
     @pytest.mark.network
-    def test_published_archive_matches_pinned_sha256(self) -> None:
-        digest = hashlib.sha256()
-        with urlopen_or_skip(THERMO_HELPER_SPECIFICATION.download_url) as response:
-            for chunk in iter(lambda: response.read(1024 * 1024), b""):
-                digest.update(chunk)
+    def test_cached_release_archive_matches_pinned_sha256(self) -> None:
+        archive_path = get_or_download_thermo_helper_archive()
 
-        assert digest.hexdigest() == THERMO_HELPER_SPECIFICATION.sha256
+        assert (
+            verify_thermo_helper_archive(
+                archive_path,
+                specification=THERMO_HELPER_SPECIFICATION
+            )
+            == THERMO_HELPER_SPECIFICATION.sha256
+        )

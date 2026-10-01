@@ -15,7 +15,7 @@ from rawtrace_qc.thermo import (
     is_license_accepted,
     verify_helper_version,
 )
-from tests.support.network import urlopen_or_skip
+from tests.support.thermo_helper import get_or_download_thermo_helper_archive
 
 
 @pytest.mark.network
@@ -28,10 +28,10 @@ def test_downloads_installs_accepts_license_and_checks_version(tmp_path: Path) -
     initial_status = get_thermo_helper_status(data_directory=data_directory, specification=specification)
     assert initial_status.state is ThermoHelperState.NOT_INSTALLED
 
-    with urlopen_or_skip(specification.download_url, timeout=60.0):
-        pass
+    archive_path = get_or_download_thermo_helper_archive(specification=specification)
 
     executable = install_thermo_helper(
+        archive_path,
         data_directory=data_directory,
         specification=specification,
         timeout=60.0,
