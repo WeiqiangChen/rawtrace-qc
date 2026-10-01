@@ -211,6 +211,23 @@ uv sync --extra cli
 rawtrace-qc thermo status
 ```
 
+### Batch Trace Extraction
+
+Use `extract` to process one or more acquisition paths:
+
+```bash
+rawtrace-qc extract sample.raw run.d
+rawtrace-qc extract /data/acquisitions --recursive --output-dir /data/traces --precision high --no-msn
+```
+
+For each supplied path, the library first validates it as one complete acquisition. A valid Thermo `.raw` file or Bruker `.d` directory is processed directly. Any path that is not a valid acquisition is treated as a directory to scan; a path that cannot be scanned is reported as a discovery issue. By default, directory scans inspect direct children. `--recursive` includes descendants, while discovery still treats a complete Bruker `.d` directory as one acquisition rather than scanning inside it.
+
+Without `--output-dir`, each acquisition's traces are written beside that acquisition. The default names retain the source name, including `.raw` or `.d`, followed by `.ms1-trace.parquet` or `.msn-trace.parquet`. `--output-dir DIR` sends every candidate's artifacts to the shared directory. Existing artifacts with the same destination name are overwritten by the extractors.
+
+With no MS-level flags, both levels are selected. `--ms1` selects only MS1, `--msn` selects only MSn, and supplying both flags selects both. A single-level selection can fail for an acquisition that does not contain that level. `--precision low` (the default) stores trace values as float32; `--precision high` stores them as float64.
+
+The command reports one `succeeded`, `skipped`, or `failed` outcome for each discovered candidate, with output paths or a reason. Discovery and traversal issues are listed separately because those paths were not extracted candidates. In a mixed-vendor batch, Thermo helper readiness is checked once before Thermo extraction. If it is not ready, each Thermo candidate is reported as skipped with the relevant setup guidance, while Bruker candidates continue normally. The command exits with code `0` only if every candidate succeeded and there were no discovery issues; it exits nonzero for any skip, extraction failure, or discovery issue, so scripts can use the exit code while parsing the per-candidate summary for detail.
+
 `thermo status` is read-only. It exits successfully only when the pinned helper is installed, its version matches, and its license marker is present. For an incomplete setup it prints the state and the corresponding setup command.
 
 Install the pinned release from its configured download URL, or provide a local archive for an offline installation:

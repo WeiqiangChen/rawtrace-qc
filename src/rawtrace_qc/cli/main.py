@@ -6,10 +6,17 @@ from collections.abc import Sequence
 
 from cyclopts import App
 
-from rawtrace_qc.cli.thermo import thermo_app
-
 app = App(name="rawtrace-qc", help="Command-line interface for rawtrace-qc.")
-app.command(thermo_app)
+app.command(
+    "rawtrace_qc.cli.thermo:thermo_app",
+    name="thermo",
+    help="Manage ThermoScanHeaderExtractor setup.",
+)
+app.command(
+    "rawtrace_qc.cli.extract:extract",
+    name="extract",
+    help="Extract traces from Thermo and Bruker acquisitions.",
+)
 
 
 def run(argv: Sequence[str] | None = None) -> int:
