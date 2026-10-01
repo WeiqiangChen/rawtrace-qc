@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 from urllib.error import HTTPError
+from urllib.request import Request
 
 import pytest
 import tests.support.collection as collection_support
@@ -26,6 +27,20 @@ class TestUrlopenOrSkip:
 
         with network_support.urlopen_or_skip("https://example.test/asset") as response:
             assert response.read() == b"asset"
+
+    def test_sends_requested_method(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        request_methods: list[str] = []
+
+        def open_request(request: Request, timeout: float) -> BytesIO:
+            request_methods.append(request.get_method())
+            return BytesIO(b"")
+
+        monkeypatch.setattr(network_support, "urlopen", open_request)
+
+        with network_support.urlopen_or_skip("https://example.test/asset", method="HEAD"):
+            pass
+
+        assert request_methods == ["HEAD"]
 
     def test_skips_network_errors(self, monkeypatch: pytest.MonkeyPatch) -> None:
         def fail_to_open(url: str, timeout: float) -> None:

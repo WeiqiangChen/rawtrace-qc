@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-
 from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 from tests.support.network import urlopen_or_skip
 
@@ -19,6 +18,11 @@ class TestThermoHelperSpecification:
         assert f"v{specification.version}" in specification.asset_name
         assert f"/v{specification.version}/" in specification.download_url
         assert specification.download_url.endswith(specification.asset_name)
+
+    @pytest.mark.network
+    def test_published_archive_is_available(self) -> None:
+        with urlopen_or_skip(THERMO_HELPER_SPECIFICATION.download_url, timeout=10.0, method="HEAD") as response:
+            assert response.status == 200
 
     @pytest.mark.network
     def test_published_archive_matches_pinned_sha256(self) -> None:

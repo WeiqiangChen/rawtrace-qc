@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from http.client import HTTPResponse
 from urllib.error import HTTPError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import pytest
 
@@ -15,8 +15,8 @@ _SKIPPABLE_HTTP_STATUSES = {403, 407, 408, 429, 502, 503, 504}
 
 
 @contextmanager
-def urlopen_or_skip(url: str, *, timeout: float = 30) -> Iterator[HTTPResponse]:
-    """Open a URL, skipping network or proxy failures.
+def urlopen_or_skip(url: str, *, timeout: float = 30, method: str | None = None) -> Iterator[HTTPResponse]:
+    """Open a URL using an optional request method, skipping network or proxy failures.
 
     HTTP errors outside the known network/proxy cases are re-raised so a
     missing or renamed asset remains a test failure.
@@ -24,12 +24,14 @@ def urlopen_or_skip(url: str, *, timeout: float = 30) -> Iterator[HTTPResponse]:
     Args:
         url: URL to open.
         timeout: Maximum time to wait for the response. Defaults to 30 seconds.
+        method: HTTP method to use. Defaults to `None`, which lets urllib select GET.
 
     Yields:
         The open HTTP response.
     """
     try:
-        with urlopen(url, timeout=timeout) as response:
+        request = Request(url, method=method) if method is not None else url
+        with urlopen(request, timeout=timeout) as response:
             yield response
     except HTTPError as error:
         if error.code in _SKIPPABLE_HTTP_STATUSES:
