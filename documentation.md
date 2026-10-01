@@ -20,14 +20,15 @@ The package is library-first. Applications such as a command-line tool or GUI sh
     - [ ] Optimize dtype and precision for compact HTML serialization
     - [ ] Process filters requested channels by using `ProcessingOptions`
 - [x] Multi-tab HTML report generation
-- [ ] Command-line interface (typer or **cyclopts**)
+- [x] Cyclopts command-line interface
+- [x] Thermo helper status, installation, and explicit license setup
 - [ ] Graphical user interface (pyside6)
 
 ## Library API
 
 The public library is organized around services that can be used by any application. Applications should provide input directories and options, call the relevant service, and present the returned models to users. Filesystem traversal, vendor recognition, validation, and error handling belong in the library.
 
-The public services currently include `rawtrace_qc.discovery.discover`, `rawtrace_qc.extractors.BrukerExtractor`, `rawtrace_qc.extractors.ThermoExtractor`, Thermo helper locating and status services in `rawtrace_qc.thermo`, and the trace artifact functions in `rawtrace_qc.traces`. Later processing and reporting services will follow the same pattern and remain independent of any particular application interface.
+The public services currently include `rawtrace_qc.discovery.discover`, `rawtrace_qc.extractors.BrukerExtractor`, `rawtrace_qc.extractors.ThermoExtractor`, Thermo helper locating and setup services in `rawtrace_qc.thermo`, and the trace artifact functions in `rawtrace_qc.traces`. The CLI and GUI call these same services and do not own vendor-specific extraction or installation behavior.
 
 
 ## File Discovery
@@ -145,6 +146,8 @@ if result.msn_path is not None:
 
 Thermo `.raw` scan-header extraction relies on an external Windows command-line utility named `ThermoScanHeaderExtractor`. The library manages specification pinning, helper location, status inspection, and license verification.
 
+The helper remains separate because it uses Thermo's Windows-specific RAW access stack and its own license agreement. It is not bundled in the Python package or wheel. Installing the Python CLI does not install the helper, and extracting or reporting a `.raw` file never installs the helper or accepts its license automatically.
+
 ### Pinned Release Specification
 
 The expected helper release is pinned in `rawtrace_qc.thermo.THERMO_HELPER_SPECIFICATION`. This specification defines the exact expected release version (`0.1.0`), asset archive name, official download URL, SHA-256 checksum digest, and executable name (`ThermoScanHeaderExtractor.exe`).
@@ -198,6 +201,42 @@ print(license_text)
 # Call only after the user has reviewed and accepted the agreement.
 accept_thermo_license()
 ```
+
+## Command-Line Interface
+
+Install the optional CLI dependency and run `rawtrace-qc`:
+
+```bash
+uv sync --extra cli
+rawtrace-qc thermo status
+```
+
+`thermo status` is read-only. It exits successfully only when the pinned helper is installed, its version matches, and its license marker is present. For an incomplete setup it prints the state and the corresponding setup command.
+
+Install the pinned release from its configured download URL, or provide a local archive for an offline installation:
+
+```bash
+rawtrace-qc thermo install
+rawtrace-qc thermo install --from-zip D:\offline\ThermoScanHeaderExtractor-v0.1.0-win-x64.zip
+```
+
+Installation verifies the pinned SHA-256 checksum and does not run the helper or accept its license. After reviewing Thermo's agreement, run the explicit acceptance command. It displays the agreement returned by the helper and records acceptance only for that helper installation:
+
+```bash
+rawtrace-qc thermo accept-license
+```
+
+For a centrally managed installation, either install into a shared data root and pass the same `--data-directory` to status and acceptance, or point commands directly at the shared executable with `--helper-path`. A helper installed from a shared root is stored below `tools/thermoscanheaderextractor/<version>/`; a direct executable path may also name its containing directory. The account running acceptance needs permission to create the license marker beside that executable.
+
+```bash
+rawtrace-qc thermo install --data-directory \\server\rawtrace-tools
+rawtrace-qc thermo status --data-directory \\server\rawtrace-tools
+rawtrace-qc thermo accept-license --data-directory \\server\rawtrace-tools
+rawtrace-qc thermo status --helper-path \\server\tools\ThermoScanHeaderExtractor.exe
+rawtrace-qc thermo accept-license --helper-path \\server\tools\ThermoScanHeaderExtractor.exe
+```
+
+The helper's release version, asset, and checksum are pinned by the installed `rawtrace-qc` release. To upgrade the helper, upgrade `rawtrace-qc` to a release with the newer pin, then run `rawtrace-qc thermo install`; use `--from-zip` when the matching release archive must be transferred offline. Versioned installations are kept separate, and a conflicting existing installation is not silently overwritten. Accept the Thermo agreement again only if the upgraded helper has its own unaccepted marker.
 
 ### Locating a Usable Helper
 
@@ -334,7 +373,7 @@ GUI settings are stored as JSON in the platform user configuration directory. Th
 
 Reports can be temporary, in which case the GUI owns their temporary directories until it closes, or permanent, in which case the selected report directory is used. The default report uses embedded Plotly assets and can be opened immediately in the default browser.
 
-The current GUI path uses `ThermoToolManager` to locate or download a helper, then reports that its extraction adapter is not configured. It is not yet wired to the library's `ThermoExtractor`, which uses the pinned helper specification and validates schema-v1 outputs. Thermo support in the GUI remains deferred to a later UI integration step.
+Thermo GUI reports use the same `ThermoExtractor` and trace cache as the CLI. The GUI does not silently install the helper or accept its license; configure an explicit helper executable in GUI settings or use the library's managed installation path.
 
 ## Developer Guide
 
