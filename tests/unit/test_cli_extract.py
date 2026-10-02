@@ -145,11 +145,15 @@ class TestExtractCommand:
         assert "thermo" in output
         assert "extract" in output
 
-    def test_extract_help_omits_negative_ms_level_flags(self, capsys) -> None:
+    def test_extract_help_omits_unneeded_negative_flags(self, capsys) -> None:
         result = main(["extract", "--help"])
 
         output = capsys.readouterr().out
         assert result == 0
+        assert "PATH" in output
+        assert "--recursive" in output
+        assert "--empty-PATH" not in output
+        assert "--no-recursive" not in output
         assert "--ms1" in output
         assert "--msn" in output
         assert "--no-ms1" not in output

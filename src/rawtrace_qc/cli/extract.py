@@ -18,8 +18,10 @@ from rawtrace_qc.workflows import (
 
 
 def extract(
-    paths: Annotated[list[Path], Parameter(name="PATH", consume_multiple=True)],
-    recursive: bool = False,
+    paths: Annotated[
+        list[Path], Parameter(name="PATH", consume_multiple=True, negative_iterable=())
+    ],
+    recursive: Annotated[bool, Parameter(negative_bool=())] = False,
     output_dir: Path | None = None,
     precision: Literal["low", "high"] = "low",
     ms1: Annotated[bool, Parameter(negative_bool=())] = False,
