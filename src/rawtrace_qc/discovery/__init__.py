@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from rawtrace_qc.discovery.discover import discover, discover_inputs, validate_path
+from rawtrace_qc.discovery.discover import (
+    discover,
+    discover_inputs,
+    resolve_input_path_pattern,
+    validate_path,
+)
 from rawtrace_qc.discovery.models import (
     DiscoveryCandidate,
     DiscoveryIssue,
@@ -33,6 +38,7 @@ __all__ = [
     "Vendor",
     "discover",
     "discover_inputs",
+    "resolve_input_path_pattern",
     "validate_bruker",
     "validate_path",
     "validate_thermo",

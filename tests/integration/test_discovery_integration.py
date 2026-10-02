@@ -50,3 +50,24 @@ def test_discover_inputs_deduplicates_an_explicit_file_and_its_directory(tmp_pat
 
     assert [candidate.path for candidate in result.candidates] == [raw_file]
     assert result.issues == ()
+
+
+def test_discover_inputs_expands_recursive_glob_independently_of_scope(tmp_path: Path) -> None:
+    root_file = tmp_path / "root.raw"
+    nested_file = tmp_path / "nested" / "nested.raw"
+    nested_file.parent.mkdir()
+    _write_file(root_file, 1)
+    _write_file(nested_file, 1)
+
+    result = discover_inputs(
+        (tmp_path / "**" / "*.raw",),
+        DiscoveryOptions(
+            scope=DiscoveryScope.DIRECT,
+            min_size_bytes=1,
+            min_age_seconds=600,
+            clock=lambda: NOW,
+        ),
+    )
+
+    assert {candidate.path for candidate in result.candidates} == {root_file, nested_file}
+    assert result.issues == ()

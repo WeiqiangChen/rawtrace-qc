@@ -67,6 +67,23 @@ class TestExtractCommand:
         assert "succeeded" in output
         assert "sample.msn-trace.parquet" in output
 
+    def test_glob_pattern_is_forwarded_to_batch_discovery(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pattern = tmp_path / "*.raw"
+        calls: dict[str, object] = {}
+
+        def fake_extract_batch(paths, **kwargs):
+            calls["paths"] = paths
+            return BatchExtractionResult(outcomes=(), discovery_issues=())
+
+        monkeypatch.setattr(extract_cli_module, "extract_batch", fake_extract_batch)
+
+        result = main(["extract", str(pattern)])
+
+        assert result == 0
+        assert calls["paths"] == [pattern]
+
     @pytest.mark.parametrize(
         ("flags", "select_ms1", "select_msn"),
         [

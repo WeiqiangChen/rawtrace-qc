@@ -99,6 +99,18 @@ class TestExtractBatch:
         assert result.outcomes[0].status is ExtractionOutcomeStatus.SUCCEEDED
         assert thermo.calls[0]["input_path"] == raw_file
 
+    def test_glob_input_is_expanded_before_extraction(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        raw_file = _create_raw(tmp_path / "sample.raw")
+        thermo = RecordingExtractor()
+        monkeypatch.setattr(workflow_module, "ThermoExtractor", lambda: thermo)
+        monkeypatch.setattr(workflow_module, "get_thermo_helper_status", _ready_helper_status)
+
+        result = extract_batch([tmp_path / "*.raw"], discovery_options=_discovery_options())
+
+        assert result.exit_code == 0
+        assert [outcome.candidate.path for outcome in result.outcomes] == [raw_file]
+        assert thermo.calls[0]["input_path"] == raw_file
+
     @pytest.mark.parametrize(("recursive", "expected_candidates"), [(False, 0), (True, 1)])
     def test_directory_scan_obeys_recursive_flag(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, recursive: bool, expected_candidates: int

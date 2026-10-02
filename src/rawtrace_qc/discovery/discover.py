@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import glob
 import os
 import stat
 from collections import deque
@@ -32,15 +33,28 @@ def discover_inputs(
     options: DiscoveryOptions | None = None,
     registry: DiscoveryRegistry | None = None,
 ) -> DiscoveryResult:
-    """Resolve input paths and discover supported acquisitions.
+    """Resolve paths and glob patterns, then discover supported acquisitions.
 
-    Each input is first validated as a complete acquisition. Inputs that are
-    not acquisitions are scanned as directories using the selected options.
+    Each input is expanded independently of the discovery scope. Glob patterns
+    support `*`, `?`, character classes, and recursive `**`. Each matching path
+    is first validated as a complete acquisition; paths that are not
+    acquisitions are scanned as directories using the selected options.
     Candidates found through multiple inputs are included once, and all
     non-fatal input-resolution and traversal issues are returned.
 
+    Examples:
+        ```python
+        from rawtrace_qc.discovery import DiscoveryOptions, DiscoveryScope
+        from rawtrace_qc.discovery import discover_inputs
+
+        result = discover_inputs(
+            ["/data/**/*.raw", "/data/run.d"],
+            DiscoveryOptions(scope=DiscoveryScope.RECURSIVE),
+        )
+        ```
+
     Args:
-        inputs: Acquisition files or directories to resolve.
+        inputs: Acquisition paths, directories, or glob patterns to resolve.
         options: Discovery configuration. If None (default), uses direct
             discovery, all built-in vendors, default thresholds, and the system
             clock.
@@ -62,37 +76,91 @@ def discover_inputs(
     seen: set[str] = set()
 
     for input_path in input_paths:
-        candidate = validate_path(input_path, selected, registry)
-        if candidate is not None:
-            input_candidates = (candidate,)
-        else:
-            try:
-                discovery_result = discover(input_path, selected, registry)
-            except DiscoveryError as error:
-                issues.append(
-                    DiscoveryIssue(input_path, str(error), code="input_resolution")
-                )
-                continue
-
-            issues.extend(discovery_result.issues)
-            if not discovery_result.candidates:
+        resolved_paths = resolve_input_path_pattern(input_path)
+        if not resolved_paths:
+            if glob.has_magic(os.fspath(input_path)):
                 issues.append(
                     DiscoveryIssue(
                         input_path,
-                        "No supported complete acquisitions were found.",
-                        code="no_candidates",
+                        f"No paths matched input pattern {input_path!r}.",
+                        code="pattern_no_matches",
                     )
                 )
-            input_candidates = discovery_result.candidates
+            else:
+                issues.append(
+                    DiscoveryIssue(
+                        input_path,
+                        f"Input path {input_path!r} does not exist.",
+                        code="path_not_found",
+                    )
+                )
+            continue
 
-        for input_candidate in input_candidates:
-            key = _path_key(input_candidate.path)
-            if key in seen:
-                continue
-            seen.add(key)
-            candidates.append(input_candidate)
+        for resolved_path in resolved_paths:
+            candidate = validate_path(resolved_path, selected, registry)
+            if candidate is not None:
+                input_candidates = (candidate,)
+            else:
+                try:
+                    discovery_result = discover(resolved_path, selected, registry)
+                except DiscoveryError as error:
+                    issues.append(
+                        DiscoveryIssue(
+                            resolved_path, str(error), code="input_resolution"
+                        )
+                    )
+                    continue
+
+                issues.extend(discovery_result.issues)
+                if not discovery_result.candidates:
+                    issues.append(
+                        DiscoveryIssue(
+                            resolved_path,
+                            "No supported complete acquisitions were found.",
+                            code="no_candidates",
+                        )
+                    )
+                input_candidates = discovery_result.candidates
+
+            for input_candidate in input_candidates:
+                key = _path_key(input_candidate.path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(input_candidate)
 
     return DiscoveryResult(tuple(candidates), tuple(issues))
+
+
+def resolve_input_path_pattern(input_path: str | os.PathLike[str]) -> list[Path]:
+    """Return existing paths matched by a literal path or glob pattern.
+
+    Glob patterns support `*`, `?`, character classes, and recursive `**`.
+    This function resolves filesystem paths only and does not validate
+    acquisition formats.
+
+    Args:
+        input_path: File path, directory path, or glob pattern to resolve.
+
+    Returns:
+        Matching existing paths as absolute `Path` objects, or an empty list
+        when the path does not exist or the pattern has no matches.
+    """
+    normalized_path = Path(input_path).expanduser().absolute()
+    pattern = os.fspath(normalized_path)
+    if not glob.has_magic(pattern):
+        return [normalized_path] if os.path.lexists(normalized_path) else []
+
+    matches: list[Path] = []
+    seen: set[str] = set()
+    for match in glob.iglob(pattern, recursive=True):
+        path = Path(match).absolute()
+        key = _path_key(path)
+        if key in seen or not os.path.lexists(path):
+            continue
+        seen.add(key)
+        matches.append(path)
+    return sorted(matches, key=_path_key)
 
 
 def discover(

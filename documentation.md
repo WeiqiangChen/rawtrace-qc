@@ -35,6 +35,8 @@ The public services currently include `rawtrace_qc.discovery.discover`, `rawtrac
 
 Use `discover()` to find valid raw acquisitions below a source directory. By default it examines direct children, uses the built-in Thermo and Bruker validators, requires files to be at least 1 MiB, and requires the relevant recording data to be at least 10 minutes old.
 
+Use `discover_inputs()` when inputs may be individual files, directories, or glob patterns. Patterns support `*`, `?`, character classes such as `[ab]`, and recursive `**`. Unmatched patterns and nonexistent literal paths are returned as `DiscoveryResult.issues`; path resolution does not validate acquisition formats. `**` expansion is recursive regardless of `DiscoveryOptions.scope`. The scope controls traversal inside concrete directories that are not already valid acquisitions, and a directly validated acquisition is never traversed.
+
 Set `DiscoveryScope.RECURSIVE` to inspect descendants. Recursive traversal does not follow symlinks. A directory ending in `.d` that contains a regular `.tdf` or `.tdf_bin` file is treated as a possible Bruker acquisition and is not traversed further. This prevents files inside an acquisition from being reported as separate acquisitions.
 
 The result contains valid candidates and traversal issues:
@@ -46,6 +48,17 @@ The result contains valid candidates and traversal issues:
 Thermo candidates must be non-empty regular files with a case-insensitive `.raw` suffix. Bruker candidates must be directories with a case-insensitive `.d` suffix containing at least one non-empty `.tdf` file and one non-empty, sufficiently old `.tdf_bin` file. Bruker member basenames are arbitrary.
 
 The thresholds and clock are configurable through `DiscoveryOptions`. Additional vendors can be added by registering a validator on `DiscoveryRegistry`. A validator receives the traversed files and directories, the configured thresholds, and the current Unix timestamp. It returns only paths that are valid for that vendor.
+
+### Input Pattern Example
+
+```python
+from rawtrace_qc.discovery import DiscoveryOptions, DiscoveryScope, discover_inputs
+
+result = discover_inputs(
+	["/data/**/*.raw", "/data/run.d"],
+	DiscoveryOptions(scope=DiscoveryScope.RECURSIVE),
+)
+```
 
 ### Basic Example
 
@@ -221,6 +234,8 @@ rawtrace-qc extract /data/acquisitions --recursive --output-dir /data/traces --p
 ```
 
 For each supplied path, the library first validates it as one complete acquisition. A valid Thermo `.raw` file or Bruker `.d` directory is processed directly. Any path that is not a valid acquisition is treated as a directory to scan; a path that cannot be scanned is reported as a discovery issue. By default, directory scans inspect direct children. `--recursive` includes descendants, while discovery still treats a complete Bruker `.d` directory as one acquisition rather than scanning inside it.
+
+The command also accepts quoted glob patterns, for example `rawtrace-qc extract "/data/**/*.raw"`. The pattern is expanded by the library, so `**` matches recursively regardless of `--recursive`; that flag only controls traversal of matched directories that are not complete acquisitions. An unmatched pattern or nonexistent literal path is reported as a discovery issue.
 
 Without `--output-dir`, each acquisition's traces are written beside that acquisition. The default names retain the source name, including `.raw` or `.d`, followed by `.ms1-trace.parquet` or `.msn-trace.parquet`. `--output-dir DIR` sends every candidate's artifacts to the shared directory. Existing artifacts with the same destination name are overwritten by the extractors.
 

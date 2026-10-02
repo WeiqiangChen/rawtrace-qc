@@ -84,16 +84,17 @@ def extract_batch(
     select_msn: bool = True,
     discovery_options: DiscoveryOptions | None = None,
 ) -> BatchExtractionResult:
-    """Discover and extract each acquisition supplied directly or by directory.
+    """Discover and extract acquisitions from paths, directories, or glob patterns.
 
-    Each path is first validated as one complete acquisition. If it is not an
-    acquisition, the path is scanned as a directory using the requested scope.
-    Thermo helper readiness is checked once when the resolved batch contains
-    Thermo candidates; an unavailable helper skips those candidates without
-    preventing Bruker candidates from being processed.
+    Each input resolves to one or more paths. Every resolved path is first
+    validated as one complete acquisition; paths that are not acquisitions are
+    scanned as directories using the requested scope. Thermo helper readiness
+    is checked once when the resolved batch contains Thermo candidates; an
+    unavailable helper skips those candidates without preventing Bruker
+    candidates from being processed.
 
     Args:
-        paths: One or more acquisition paths or directories to scan.
+        paths: Acquisition files, directories, or glob patterns to scan.
         recursive: If True, scan directory descendants. Defaults to False.
         output_directory: Optional shared output directory. Defaults to each
             acquisition's parent directory.

@@ -33,7 +33,7 @@ def extract(
     also selects both levels.
 
     Args:
-        paths: One or more acquisition files, folders, or directories to scan.
+        paths: Acquisition files, directories, or glob patterns to scan.
         recursive: If True, scan source directories recursively. Defaults to False.
         output_dir: Optional output directory shared by all candidates.
         precision: Trace precision, either `low` or `high`. Defaults to `low`.

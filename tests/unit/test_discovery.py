@@ -21,6 +21,7 @@ from rawtrace_qc.discovery import (
     Vendor,
     discover,
     discover_inputs,
+    resolve_input_path_pattern,
     validate_bruker,
     validate_path,
     validate_thermo,
@@ -278,10 +279,53 @@ class TestDiscoverInputs:
 
         assert result.candidates == ()
         assert [issue.path for issue in result.issues] == [empty_directory, missing_path]
-        assert [issue.code for issue in result.issues] == ["no_candidates", "input_resolution"]
+        assert [issue.code for issue in result.issues] == ["no_candidates", "path_not_found"]
         assert all(isinstance(issue, DiscoveryIssue) for issue in result.issues)
         assert "No supported" in result.issues[0].message
+
+    def test_reports_unmatched_glob_pattern(self, tmp_path: Path) -> None:
+        pattern = tmp_path / "*.raw"
+
+        result = discover_inputs((pattern,), _options())
+
+        assert result.candidates == ()
+        assert len(result.issues) == 1
+        assert result.issues[0].path == pattern.absolute()
+        assert result.issues[0].code == "pattern_no_matches"
+        assert "No paths matched" in result.issues[0].message
 
     def test_requires_at_least_one_input(self) -> None:
         with pytest.raises(ConfigurationError, match="At least one input path"):
             discover_inputs(())
+
+
+class TestResolveInputPathPattern:
+    def test_returns_existing_files_and_directories_without_format_validation(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        text_file = source / "notes.txt"
+        text_file.write_text("not an acquisition")
+
+        assert resolve_input_path_pattern(text_file) == [text_file.absolute()]
+        assert resolve_input_path_pattern(str(text_file)) == [text_file.absolute()]
+        assert resolve_input_path_pattern(source) == [source.absolute()]
+
+    def test_returns_empty_list_for_missing_plain_path(self, tmp_path: Path) -> None:
+        assert resolve_input_path_pattern(tmp_path / "missing.raw") == []
+
+    def test_expands_star_question_mark_character_class_and_recursive_patterns(self, tmp_path: Path) -> None:
+        root_files = [tmp_path / "run-a.raw", tmp_path / "run-b.raw", tmp_path / "run-12.raw"]
+        nested_file = tmp_path / "nested" / "run-c.raw"
+        nested_file.parent.mkdir()
+        for path in (*root_files, nested_file):
+            path.write_bytes(b"data")
+
+        assert resolve_input_path_pattern(tmp_path / "run-*.raw") == [
+            tmp_path / "run-12.raw",
+            tmp_path / "run-a.raw",
+            tmp_path / "run-b.raw",
+        ]
+        assert resolve_input_path_pattern(tmp_path / "run-?.raw") == root_files[:2]
+        assert resolve_input_path_pattern(tmp_path / "run-[ab].raw") == root_files[:2]
+        recursive_matches = resolve_input_path_pattern(tmp_path / "**" / "run-?.raw")
+        assert set(recursive_matches) == {root_files[0], root_files[1], nested_file}
