@@ -6,7 +6,7 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
-from rawtrace_qc.discovery import DiscoveryOptions, DiscoveryScope, Vendor, discover
+from rawtrace_qc.discovery import DiscoveryOptions, DiscoveryScope, Vendor, discover, discover_inputs
 
 NOW = datetime(2026, 8, 4, tzinfo=UTC).timestamp()
 
@@ -37,4 +37,16 @@ def test_discover_mixed_recursive_tree(tmp_path: Path) -> None:
 
     assert [candidate.path.name for candidate in result.candidates] == ["bruker.D", "nested.raw", "thermo.RAW"]
     assert [candidate.vendor for candidate in result.candidates] == [Vendor.BRUKER, Vendor.THERMO, Vendor.THERMO]
+    assert result.issues == ()
+
+
+def test_discover_inputs_deduplicates_an_explicit_file_and_its_directory(tmp_path: Path) -> None:
+    raw_file = tmp_path / "thermo.RAW"
+    _write_file(raw_file, 1)
+
+    result = discover_inputs(
+        (str(raw_file), tmp_path), DiscoveryOptions(min_size_bytes=1, min_age_seconds=600, clock=lambda: NOW)
+    )
+
+    assert [candidate.path for candidate in result.candidates] == [raw_file]
     assert result.issues == ()

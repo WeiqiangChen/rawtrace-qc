@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 from rawtrace_qc.discovery import (
     DiscoveryCandidate,
+    DiscoveryIssue,
     DiscoveryOptions,
     DiscoveryRegistry,
     DiscoveryResult,
@@ -19,6 +20,7 @@ from rawtrace_qc.discovery import (
     TraversalTree,
     Vendor,
     discover,
+    discover_inputs,
     validate_bruker,
     validate_path,
     validate_thermo,
@@ -215,6 +217,7 @@ class TestDiscover:
 
         assert result.candidates[0].path == accessible
         assert result.issues[0].path == blocked
+        assert discover_inputs((tmp_path,), _options()).issues[0].path == blocked
 
     def test_source_must_be_an_accessible_real_directory(self, tmp_path: Path) -> None:
         source_file = _write_file(tmp_path / "source.raw", 1)
@@ -252,3 +255,33 @@ class TestValidatePath:
             pytest.skip(f"symlinks are unavailable: {error}")
 
         assert validate_path(link, _options()) is None
+
+
+class TestDiscoverInputs:
+    def test_resolves_files_and_directories_and_deduplicates_candidates(self, tmp_path: Path) -> None:
+        source = tmp_path / "source"
+        source.mkdir()
+        raw_file = _write_file(source / "sample.raw", 1)
+        bruker_directory = _write_bruker(source / "run.d")
+
+        result = discover_inputs((str(raw_file), source, bruker_directory), _options())
+
+        assert [candidate.path for candidate in result.candidates] == [raw_file, bruker_directory]
+        assert result.issues == ()
+
+    def test_accumulates_empty_scan_and_input_resolution_issues(self, tmp_path: Path) -> None:
+        empty_directory = tmp_path / "empty"
+        empty_directory.mkdir()
+        missing_path = tmp_path / "missing"
+
+        result = discover_inputs((empty_directory, str(missing_path)), _options())
+
+        assert result.candidates == ()
+        assert [issue.path for issue in result.issues] == [empty_directory, missing_path]
+        assert [issue.code for issue in result.issues] == ["no_candidates", "input_resolution"]
+        assert all(isinstance(issue, DiscoveryIssue) for issue in result.issues)
+        assert "No supported" in result.issues[0].message
+
+    def test_requires_at_least_one_input(self) -> None:
+        with pytest.raises(ConfigurationError, match="At least one input path"):
+            discover_inputs(())

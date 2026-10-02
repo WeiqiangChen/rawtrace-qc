@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from rawtrace_qc.discovery.discover import discover, validate_path
+from rawtrace_qc.discovery.discover import discover, discover_inputs, validate_path
 from rawtrace_qc.discovery.models import (
     DiscoveryCandidate,
+    DiscoveryIssue,
     DiscoveryOptions,
     DiscoveryResult,
     DiscoveryScope,
@@ -21,6 +22,7 @@ from rawtrace_qc.discovery.registry import DiscoveryRegistry
 
 __all__ = [
     "DiscoveryCandidate",
+    "DiscoveryIssue",
     "DiscoveryOptions",
     "DiscoveryRegistry",
     "DiscoveryResult",
@@ -30,6 +32,7 @@ __all__ = [
     "TraversalTree",
     "Vendor",
     "discover",
+    "discover_inputs",
     "validate_bruker",
     "validate_path",
     "validate_thermo",

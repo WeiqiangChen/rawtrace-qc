@@ -4,13 +4,12 @@ import os
 from pathlib import Path
 
 import pytest
-from rawtrace_qc.discovery import DiscoveryOptions, Vendor
+from rawtrace_qc.discovery import DiscoveryIssue, DiscoveryOptions, Vendor
 from rawtrace_qc.errors import ThermoHelperNotFoundError
 from rawtrace_qc.models import ExtractionResult
 from rawtrace_qc.thermo import ThermoHelperState, ThermoHelperStatus
 from rawtrace_qc.workflows import (
     BatchExtractionResult,
-    ExtractionDiscoveryIssue,
     ExtractionOutcomeStatus,
     extract_batch,
 )
@@ -230,7 +229,7 @@ class TestBatchExtractionResult:
     def test_exit_code_is_nonzero_for_discovery_issues(self, tmp_path: Path) -> None:
         result = BatchExtractionResult(
             outcomes=(),
-            discovery_issues=(ExtractionDiscoveryIssue(tmp_path, "No acquisitions."),),
+            discovery_issues=(DiscoveryIssue(tmp_path, "No acquisitions."),),
         )
 
         assert result.exit_code == 1

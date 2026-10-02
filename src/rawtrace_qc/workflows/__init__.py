@@ -5,7 +5,6 @@ from __future__ import annotations
 from rawtrace_qc.workflows.extraction import (
     BatchExtractionOutcome,
     BatchExtractionResult,
-    ExtractionDiscoveryIssue,
     ExtractionOutcomeStatus,
     extract_batch,
 )
@@ -13,7 +12,6 @@ from rawtrace_qc.workflows.extraction import (
 __all__ = [
     "BatchExtractionOutcome",
     "BatchExtractionResult",
-    "ExtractionDiscoveryIssue",
     "ExtractionOutcomeStatus",
     "extract_batch",
 ]

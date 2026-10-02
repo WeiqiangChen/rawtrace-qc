@@ -5,13 +5,12 @@ from pathlib import Path
 import pytest
 from rawtrace_qc.cli import extract as extract_cli_module
 from rawtrace_qc.cli import main
-from rawtrace_qc.discovery import DiscoveryCandidate, Vendor
+from rawtrace_qc.discovery import DiscoveryCandidate, DiscoveryIssue, Vendor
 from rawtrace_qc.errors import ThermoHelperNotFoundError
 from rawtrace_qc.models import ExtractionResult
 from rawtrace_qc.workflows import (
     BatchExtractionOutcome,
     BatchExtractionResult,
-    ExtractionDiscoveryIssue,
     ExtractionOutcomeStatus,
 )
 
@@ -121,7 +120,7 @@ class TestExtractCommand:
         self, tmp_path: Path, monkeypatch, capsys
     ) -> None:
         candidate = DiscoveryCandidate(tmp_path / "sample.raw", Vendor.THERMO, "raw")
-        issue = ExtractionDiscoveryIssue(tmp_path / "unclassified", "No supported complete acquisitions were found.")
+        issue = DiscoveryIssue(tmp_path / "unclassified", "No supported complete acquisitions were found.")
         batch_result = BatchExtractionResult(
             outcomes=(BatchExtractionOutcome(candidate, ExtractionOutcomeStatus.SUCCEEDED),),
             discovery_issues=(issue,),

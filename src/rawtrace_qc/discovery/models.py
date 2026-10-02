@@ -19,12 +19,22 @@ class DiscoveryScope(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class TraversalIssue:
-    """Describe a filesystem problem encountered below the source directory."""
+class DiscoveryIssue:
+    """Describe an input-resolution or filesystem traversal problem."""
 
     path: Path
-    code: str
     message: str
+    code: str | None = None
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class TraversalIssue(DiscoveryIssue):
+    """Describe a filesystem problem encountered below the source directory."""
+
+    def __init__(self, path: Path, code: str, message: str) -> None:
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "message", message)
+        object.__setattr__(self, "code", code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,10 +57,10 @@ class DiscoveryCandidate:
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryResult:
-    """Return valid candidates together with non-fatal traversal issues."""
+    """Return valid candidates together with non-fatal discovery issues."""
 
     candidates: tuple[DiscoveryCandidate, ...] = ()
-    issues: tuple[TraversalIssue, ...] = ()
+    issues: tuple[DiscoveryIssue, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

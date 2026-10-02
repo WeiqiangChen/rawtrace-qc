@@ -5,11 +5,12 @@ from __future__ import annotations
 import os
 import stat
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 from rawtrace_qc.discovery.models import (
     DiscoveryCandidate,
+    DiscoveryIssue,
     DiscoveryOptions,
     DiscoveryResult,
     DiscoveryScope,
@@ -23,7 +24,75 @@ from rawtrace_qc.discovery.policies import (
     validate_thermo,
 )
 from rawtrace_qc.discovery.registry import DiscoveryRegistry
-from rawtrace_qc.errors import DiscoveryError
+from rawtrace_qc.errors import ConfigurationError, DiscoveryError
+
+
+def discover_inputs(
+    inputs: Iterable[str | os.PathLike[str]],
+    options: DiscoveryOptions | None = None,
+    registry: DiscoveryRegistry | None = None,
+) -> DiscoveryResult:
+    """Resolve input paths and discover supported acquisitions.
+
+    Each input is first validated as a complete acquisition. Inputs that are
+    not acquisitions are scanned as directories using the selected options.
+    Candidates found through multiple inputs are included once, and all
+    non-fatal input-resolution and traversal issues are returned.
+
+    Args:
+        inputs: Acquisition files or directories to resolve.
+        options: Discovery configuration. If None (default), uses direct
+            discovery, all built-in vendors, default thresholds, and the system
+            clock.
+        registry: Validator registry. If None (default), uses Bruker and Thermo.
+
+    Returns:
+        Deduplicated valid candidates and non-fatal input or traversal issues.
+
+    Raises:
+        ConfigurationError: If no input paths are supplied.
+    """
+    input_paths = tuple(Path(path).expanduser().absolute() for path in inputs)
+    if not input_paths:
+        raise ConfigurationError("At least one input path is required.")
+
+    selected = options or DiscoveryOptions()
+    candidates: list[DiscoveryCandidate] = []
+    issues: list[DiscoveryIssue] = []
+    seen: set[str] = set()
+
+    for input_path in input_paths:
+        candidate = validate_path(input_path, selected, registry)
+        if candidate is not None:
+            input_candidates = (candidate,)
+        else:
+            try:
+                discovery_result = discover(input_path, selected, registry)
+            except DiscoveryError as error:
+                issues.append(
+                    DiscoveryIssue(input_path, str(error), code="input_resolution")
+                )
+                continue
+
+            issues.extend(discovery_result.issues)
+            if not discovery_result.candidates:
+                issues.append(
+                    DiscoveryIssue(
+                        input_path,
+                        "No supported complete acquisitions were found.",
+                        code="no_candidates",
+                    )
+                )
+            input_candidates = discovery_result.candidates
+
+        for input_candidate in input_candidates:
+            key = _path_key(input_candidate.path)
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(input_candidate)
+
+    return DiscoveryResult(tuple(candidates), tuple(issues))
 
 
 def discover(

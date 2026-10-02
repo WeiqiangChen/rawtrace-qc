@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from enum import StrEnum
@@ -10,15 +9,14 @@ from pathlib import Path
 
 from rawtrace_qc.discovery import (
     DiscoveryCandidate,
+    DiscoveryIssue,
     DiscoveryOptions,
     DiscoveryScope,
     Vendor,
-    discover,
-    validate_path,
+    discover_inputs,
 )
 from rawtrace_qc.errors import (
     ConfigurationError,
-    DiscoveryError,
     ThermoHelperError,
     ThermoHelperLicenseError,
     ThermoHelperNotFoundError,
@@ -45,14 +43,6 @@ class ExtractionOutcomeStatus(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class ExtractionDiscoveryIssue:
-    """Describe an input path that could not be classified or fully scanned."""
-
-    path: Path
-    message: str
-
-
-@dataclass(frozen=True, slots=True)
 class BatchExtractionOutcome:
     """Store the extraction result or reason for one discovered candidate."""
 
@@ -72,7 +62,7 @@ class BatchExtractionResult:
     """Collect candidate outcomes and discovery issues for a batch."""
 
     outcomes: tuple[BatchExtractionOutcome, ...]
-    discovery_issues: tuple[ExtractionDiscoveryIssue, ...]
+    discovery_issues: tuple[DiscoveryIssue, ...]
 
     @property
     def exit_code(self) -> int:
@@ -120,44 +110,13 @@ def extract_batch(
     Raises:
         ConfigurationError: If no input paths are supplied.
     """
-    input_paths = tuple(Path(path).expanduser().absolute() for path in paths)
-    if not input_paths:
-        raise ConfigurationError("At least one input path is required.")
-
     selected_options = discovery_options or DiscoveryOptions()
     scan_options = replace(
         selected_options,
         scope=DiscoveryScope.RECURSIVE if recursive else DiscoveryScope.DIRECT,
     )
-    candidates: list[DiscoveryCandidate] = []
-    discovery_issues: list[ExtractionDiscoveryIssue] = []
-    seen_candidates: set[str] = set()
-
-    for input_path in input_paths:
-        candidate = validate_path(input_path, scan_options)
-        if candidate is not None:
-            _append_candidate(candidate, candidates, seen_candidates)
-            continue
-
-        try:
-            discovery_result = discover(input_path, scan_options)
-        except DiscoveryError as error:
-            discovery_issues.append(ExtractionDiscoveryIssue(input_path, str(error)))
-            continue
-
-        discovery_issues.extend(
-            ExtractionDiscoveryIssue(issue.path, issue.message)
-            for issue in discovery_result.issues
-        )
-        if not discovery_result.candidates:
-            discovery_issues.append(
-                ExtractionDiscoveryIssue(
-                    input_path,
-                    "No supported complete acquisitions were found.",
-                )
-            )
-        for discovered_candidate in discovery_result.candidates:
-            _append_candidate(discovered_candidate, candidates, seen_candidates)
+    discovery_result = discover_inputs(paths, scan_options)
+    candidates = discovery_result.candidates
 
     thermo_candidates = [
         candidate for candidate in candidates if candidate.vendor == Vendor.THERMO
@@ -203,18 +162,7 @@ def extract_batch(
                 )
             )
 
-    return BatchExtractionResult(tuple(outcomes), tuple(discovery_issues))
-
-
-def _append_candidate(
-    candidate: DiscoveryCandidate,
-    candidates: list[DiscoveryCandidate],
-    seen_candidates: set[str],
-) -> None:
-    candidate_key = os.path.normcase(os.path.abspath(candidate.path))
-    if candidate_key not in seen_candidates:
-        candidates.append(candidate)
-        seen_candidates.add(candidate_key)
+    return BatchExtractionResult(tuple(outcomes), discovery_result.issues)
 
 
 def _get_extractor(
