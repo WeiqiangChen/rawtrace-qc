@@ -283,6 +283,35 @@ class TestDiscoverInputs:
         assert all(isinstance(issue, DiscoveryIssue) for issue in result.issues)
         assert "No supported" in result.issues[0].message
 
+    def test_ignores_non_acquisition_files_matched_by_glob(self, tmp_path: Path) -> None:
+        raw_file = _write_file(tmp_path / "sample.raw", 1)
+        (tmp_path / "notes.txt").write_text("not an acquisition")
+
+        result = discover_inputs((tmp_path / "*",), _options())
+
+        assert [candidate.path for candidate in result.candidates] == [raw_file]
+        assert result.issues == ()
+
+    def test_creates_no_issues_when_glob_matches_only_non_acquisition_files(self, tmp_path: Path) -> None:
+        (tmp_path / "notes.txt").write_text("not an acquisition")
+
+        result = discover_inputs((tmp_path / "*.txt",), _options())
+
+        assert result.candidates == ()
+        assert result.issues == ()
+
+    def test_reports_non_acquisition_literal_file_without_directory_error(self, tmp_path: Path) -> None:
+        unsupported_file = tmp_path / "notes.txt"
+        unsupported_file.write_text("not an acquisition")
+
+        result = discover_inputs((unsupported_file,), _options())
+
+        assert result.candidates == ()
+        assert len(result.issues) == 1
+        assert result.issues[0].path == unsupported_file
+        assert result.issues[0].code == "no_candidates"
+        assert "not a directory" not in result.issues[0].message
+
     def test_reports_unmatched_glob_pattern(self, tmp_path: Path) -> None:
         pattern = tmp_path / "*.raw"
 

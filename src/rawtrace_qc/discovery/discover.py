@@ -38,9 +38,11 @@ def discover_inputs(
     Each input is expanded independently of the discovery scope. Glob patterns
     support `*`, `?`, character classes, and recursive `**`. Each matching path
     is first validated as a complete acquisition; paths that are not
-    acquisitions are scanned as directories using the selected options.
-    Candidates found through multiple inputs are included once, and all
-    non-fatal input-resolution and traversal issues are returned.
+    acquisitions are scanned only when they are directories. Unsupported files
+    from glob expansions are ignored, while an unsupported literal file
+    produces a `no_candidates` issue. Candidates found through multiple inputs
+    are included once, and all non-fatal input-resolution and traversal issues
+    are returned.
 
     Examples:
         ```python
@@ -100,7 +102,7 @@ def discover_inputs(
             candidate = validate_path(resolved_path, selected, registry)
             if candidate is not None:
                 input_candidates = (candidate,)
-            else:
+            elif resolved_path.is_dir():
                 try:
                     discovery_result = discover(resolved_path, selected, registry)
                 except DiscoveryError as error:
@@ -121,6 +123,16 @@ def discover_inputs(
                         )
                     )
                 input_candidates = discovery_result.candidates
+            else:
+                if not glob.has_magic(os.fspath(input_path)):
+                    issues.append(
+                        DiscoveryIssue(
+                            resolved_path,
+                            "No supported complete acquisitions were found.",
+                            code="no_candidates",
+                        )
+                    )
+                continue
 
             for input_candidate in input_candidates:
                 key = _path_key(input_candidate.path)
