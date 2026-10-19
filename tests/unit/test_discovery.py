@@ -270,6 +270,33 @@ class TestDiscoverInputs:
         assert [candidate.path for candidate in result.candidates] == [raw_file, bruker_directory]
         assert result.issues == ()
 
+    def test_recursive_scope_scans_parent_before_child_without_redundant_discovery(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = tmp_path / "source"
+        child = source / "nested"
+        child.mkdir(parents=True)
+        raw_file = _write_file(source / "sample.raw", 1)
+        discover_module = importlib.import_module("rawtrace_qc.discovery.discover")
+        original_discover = discover_module.discover
+        scanned: list[Path] = []
+
+        def recording_discover(
+            root: Path,
+            options: DiscoveryOptions | None = None,
+            registry: DiscoveryRegistry | None = None,
+        ) -> DiscoveryResult:
+            scanned.append(root)
+            return original_discover(root, options, registry)
+
+        monkeypatch.setattr(discover_module, "discover", recording_discover)
+
+        result = discover_inputs((child, source), _options())
+
+        assert scanned == [source]
+        assert [candidate.path for candidate in result.candidates] == [raw_file]
+        assert result.issues == ()
+
     def test_accumulates_empty_scan_and_input_resolution_issues(self, tmp_path: Path) -> None:
         empty_directory = tmp_path / "empty"
         empty_directory.mkdir()

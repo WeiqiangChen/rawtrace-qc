@@ -7,6 +7,7 @@ import os
 import stat
 from collections import deque
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from rawtrace_qc.discovery.models import (
@@ -41,8 +42,11 @@ def discover_inputs(
     acquisitions are scanned only when they are directories. Unsupported files
     from glob expansions are ignored, while an unsupported literal file
     produces a `no_candidates` issue. Candidates found through multiple inputs
-    are included once, and all non-fatal input-resolution and traversal issues
-    are returned.
+    are included once. In recursive scope, supplied directories are processed
+    ancestor-first, and nested directories beneath a traversed input root are
+    not traversed repeatedly.
+
+    All non-fatal input-resolution and traversal issues are returned.
 
     Examples:
         ```python
@@ -68,80 +72,14 @@ def discover_inputs(
     Raises:
         ConfigurationError: If no input paths are supplied.
     """
-    input_paths = tuple(Path(path).expanduser().absolute() for path in inputs)
-    if not input_paths:
+    normalized_inputs = tuple(Path(path).expanduser().absolute() for path in inputs)
+    if not normalized_inputs:
         raise ConfigurationError("At least one input path is required.")
 
     selected = options or DiscoveryOptions()
-    candidates: list[DiscoveryCandidate] = []
-    issues: list[DiscoveryIssue] = []
-    seen: set[str] = set()
-
-    for input_path in input_paths:
-        resolved_paths = resolve_input_path_pattern(input_path)
-        if not resolved_paths:
-            if glob.has_magic(os.fspath(input_path)):
-                issues.append(
-                    DiscoveryIssue(
-                        input_path,
-                        f"No paths matched input pattern {input_path!r}.",
-                        code="pattern_no_matches",
-                    )
-                )
-            else:
-                issues.append(
-                    DiscoveryIssue(
-                        input_path,
-                        f"Input path {input_path!r} does not exist.",
-                        code="path_not_found",
-                    )
-                )
-            continue
-
-        for resolved_path in resolved_paths:
-            candidate = validate_path(resolved_path, selected, registry)
-            if candidate is not None:
-                input_candidates = (candidate,)
-            elif resolved_path.is_dir():
-                try:
-                    discovery_result = discover(resolved_path, selected, registry)
-                except DiscoveryError as error:
-                    issues.append(
-                        DiscoveryIssue(
-                            resolved_path, str(error), code="input_resolution"
-                        )
-                    )
-                    continue
-
-                issues.extend(discovery_result.issues)
-                if not discovery_result.candidates:
-                    issues.append(
-                        DiscoveryIssue(
-                            resolved_path,
-                            "No supported complete acquisitions were found.",
-                            code="no_candidates",
-                        )
-                    )
-                input_candidates = discovery_result.candidates
-            else:
-                if not glob.has_magic(os.fspath(input_path)):
-                    issues.append(
-                        DiscoveryIssue(
-                            resolved_path,
-                            "No supported complete acquisitions were found.",
-                            code="no_candidates",
-                        )
-                    )
-                continue
-
-            for input_candidate in input_candidates:
-                key = _path_key(input_candidate.path)
-                if key in seen:
-                    continue
-                seen.add(key)
-                candidates.append(input_candidate)
-
-    return DiscoveryResult(tuple(candidates), tuple(issues))
+    input_discoveries = _resolve_inputs(normalized_inputs, selected, registry)
+    _discover_resolved_directories(input_discoveries, selected, registry)
+    return _build_discovery_result(input_discoveries)
 
 
 def resolve_input_path_pattern(input_path: str | os.PathLike[str]) -> list[Path]:
@@ -271,6 +209,169 @@ def validate_path(
                 normalized_path, candidate.vendor, candidate.format
             )
     return None
+
+
+@dataclass
+class _PathDiscovery:
+    """Store validation and traversal results for one resolved input path."""
+
+    input_path: Path
+    path: Path
+    validated_candidate: DiscoveryCandidate | None = None
+    discovered_candidates: list[DiscoveryCandidate] = field(default_factory=list)
+    issues: list[DiscoveryIssue] = field(default_factory=list)
+
+
+@dataclass
+class _InputDiscovery:
+    """Store resolved paths and resolution issues for one supplied input."""
+
+    path: Path
+    resolved_paths: list[_PathDiscovery] = field(default_factory=list)
+    issue: DiscoveryIssue | None = None
+
+
+def _resolve_inputs(
+    input_paths: tuple[Path, ...],
+    options: DiscoveryOptions,
+    registry: DiscoveryRegistry | None,
+) -> list[_InputDiscovery]:
+    """Resolve supplied paths and patterns into discovery records.
+
+    Args:
+        input_paths: Normalized paths supplied to `discover_inputs`.
+        options: Discovery configuration used for validation.
+        registry: Validator registry, or `None` for the built-in registry.
+
+    Returns:
+        Input records containing resolved paths, validated candidates, or
+        resolution issues.
+    """
+    discoveries: list[_InputDiscovery] = []
+    for input_path in input_paths:
+        resolved_paths = resolve_input_path_pattern(input_path)
+        if not resolved_paths:
+            if glob.has_magic(os.fspath(input_path)):
+                issue = DiscoveryIssue(
+                    input_path,
+                    f"No paths matched input pattern {input_path!r}.",
+                    code="pattern_no_matches",
+                )
+            else:
+                issue = DiscoveryIssue(
+                    input_path,
+                    f"Input path {input_path!r} does not exist.",
+                    code="path_not_found",
+                )
+            discoveries.append(_InputDiscovery(input_path, issue=issue))
+            continue
+
+        path_discoveries = [
+            _PathDiscovery(
+                input_path,
+                path,
+                validated_candidate=validate_path(path, options, registry),
+            )
+            for path in resolved_paths
+        ]
+        discoveries.append(_InputDiscovery(input_path, path_discoveries))
+    return discoveries
+
+
+def _discover_resolved_directories(
+    input_discoveries: list[_InputDiscovery],
+    options: DiscoveryOptions,
+    registry: DiscoveryRegistry | None,
+) -> None:
+    """Discover directories while pruning roots already covered recursively.
+
+    Args:
+        input_discoveries: Resolved inputs whose directories may be discovered.
+        options: Discovery configuration, including traversal scope.
+        registry: Validator registry, or `None` for the built-in registry.
+    """
+    resolved_paths = [
+        path_discovery
+        for input_discovery in input_discoveries
+        for path_discovery in input_discovery.resolved_paths
+    ]
+    if options.scope is DiscoveryScope.RECURSIVE:
+        resolved_paths.sort(key=lambda result: len(result.path.parts))
+
+    scanned_roots: list[Path] = []
+    for path_discovery in resolved_paths:
+        if path_discovery.validated_candidate is not None:
+            continue
+        if path_discovery.path.is_dir():
+            if options.scope is DiscoveryScope.RECURSIVE and any(
+                path_discovery.path.is_relative_to(root) for root in scanned_roots
+            ):
+                continue
+            try:
+                discovery_result = discover(path_discovery.path, options, registry)
+            except DiscoveryError as error:
+                path_discovery.issues.append(
+                    DiscoveryIssue(
+                        path_discovery.path, str(error), code="input_resolution"
+                    )
+                )
+                continue
+
+            scanned_roots.append(path_discovery.path)
+            path_discovery.issues.extend(
+                DiscoveryIssue(issue.path, issue.message, issue.code)
+                for issue in discovery_result.issues
+            )
+            path_discovery.discovered_candidates.extend(discovery_result.candidates)
+            if not discovery_result.candidates:
+                path_discovery.issues.append(
+                    DiscoveryIssue(
+                        path_discovery.path,
+                        "No supported complete acquisitions were found.",
+                        code="no_candidates",
+                    )
+                )
+        elif not glob.has_magic(os.fspath(path_discovery.input_path)):
+            path_discovery.issues.append(
+                DiscoveryIssue(
+                    path_discovery.path,
+                    "No supported complete acquisitions were found.",
+                    code="no_candidates",
+                )
+            )
+
+
+def _build_discovery_result(
+    input_discoveries: list[_InputDiscovery],
+) -> DiscoveryResult:
+    """Collect results in input order and deduplicate candidate paths.
+
+    Args:
+        input_discoveries: Resolved inputs with their accumulated results.
+
+    Returns:
+        Candidates and issues ordered by their original input paths.
+    """
+    candidates: list[DiscoveryCandidate] = []
+    issues: list[DiscoveryIssue] = []
+    seen: set[str] = set()
+
+    for input_discovery in input_discoveries:
+        if input_discovery.issue is not None:
+            issues.append(input_discovery.issue)
+        for path_discovery in input_discovery.resolved_paths:
+            issues.extend(path_discovery.issues)
+            path_candidates = path_discovery.discovered_candidates
+            if path_discovery.validated_candidate is not None:
+                path_candidates = [path_discovery.validated_candidate, *path_candidates]
+            for candidate in path_candidates:
+                key = _path_key(candidate.path)
+                if key in seen:
+                    continue
+                seen.add(key)
+                candidates.append(candidate)
+
+    return DiscoveryResult(tuple(candidates), tuple(issues))
 
 
 def _validated_candidates(
