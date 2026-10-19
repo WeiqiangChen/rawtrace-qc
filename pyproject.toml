@@ -1,7 +1,7 @@
 [project]
 name = "rawtrace-qc"
 version = "0.1.0"
-description = "Interactive HTML QC reports from Thermo .raw and Bruker .d mass spectrometry raw files"
+description = "Extract TIC and scan-level traces from Thermo and Bruker mass spectrometry raw files and generate interactive HTML QC reports"
 readme = "README.md"
 authors = [
     { name = "David M. Hollenstein", email = "hollenstein.david@gmail.com" }
