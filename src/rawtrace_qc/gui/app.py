@@ -36,6 +36,7 @@ def main() -> int:
     application = qt_widgets.QApplication.instance()
     if application is None:
         application = qt_widgets.QApplication(sys.argv)
+    application.setStyle("Fusion")
     application.setApplicationName("rawtrace-qc")
     application.setOrganizationName("rawtrace-qc")
     window = create_window(qt_core, qt_gui, qt_widgets)
