@@ -26,6 +26,12 @@ from rawtrace_qc.gui.reporting import (
     ReportWorkspace,
     generate_report,
 )
+from rawtrace_qc.gui.theme import (
+    LIGHT_THEME,
+    apply_theme,
+    generate_stylesheet,
+    get_active_theme,
+)
 from rawtrace_qc.gui.workflow import RawFileSelection
 from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 
@@ -37,6 +43,7 @@ def main() -> int:
     if application is None:
         application = qt_widgets.QApplication(sys.argv)
     application.setStyle("Fusion")
+    apply_theme(application, LIGHT_THEME, qt_gui)
     application.setApplicationName("rawtrace-qc")
     application.setOrganizationName("rawtrace-qc")
     window = create_window(qt_core, qt_gui, qt_widgets)
@@ -51,6 +58,12 @@ def create_window(
     settings_path: Path | None = None,
 ) -> Any:
     """Build and return the main window using already-loaded Qt modules."""
+    application = qt_widgets.QApplication.instance()
+    if application is not None and application.styleSheet() != generate_stylesheet(
+        LIGHT_THEME
+    ):
+        apply_theme(application, LIGHT_THEME, qt_gui)
+
     try:
         settings = load_settings(settings_path)
         configuration_message = ""
@@ -141,13 +154,14 @@ def create_window(
             rect = self._checkbox_rect(option)
             painter.save()
             painter.setRenderHint(qt_gui.QPainter.RenderHint.Antialiasing)
-            painter.setPen(qt_gui.QPen(qt_gui.QColor("#063853"), 1.2))
-            painter.setBrush(qt_gui.QBrush(qt_gui.QColor("#ffffff")))
+            theme = get_active_theme()
+            painter.setPen(qt_gui.QPen(qt_gui.QColor(theme.checkbox_border), 1.2))
+            painter.setBrush(qt_gui.QBrush(qt_gui.QColor(theme.checkbox_background)))
             painter.drawRoundedRect(rect, 3, 3)
             if index.data(qt_core.Qt.ItemDataRole.CheckStateRole) == (
                 qt_core.Qt.CheckState.Checked.value
             ):
-                painter.setPen(qt_gui.QPen(qt_gui.QColor("#40B7B5"), 2))
+                painter.setPen(qt_gui.QPen(qt_gui.QColor(theme.checkbox_check), 2))
                 painter.drawLine(
                     qt_core.QPoint(rect.left() + 4, rect.center().y()),
                     qt_core.QPoint(rect.center().x() - 1, rect.bottom() - 4),
@@ -239,7 +253,6 @@ def create_window(
             self._build_ui()
 
         def _build_ui(self) -> None:
-            self.setStyleSheet(_STYLE)
             central = qt_widgets.QWidget()
             self.setCentralWidget(central)
             root = qt_widgets.QVBoxLayout(central)
@@ -1074,100 +1087,5 @@ def _thermo_settings(executable: str) -> Any:
     from rawtrace_qc.gui.config import ThermoToolSettings
 
     return ThermoToolSettings(
-        executable_path=Path(executable.strip()) if executable.strip() else None,
+        executable_path=Path(executable.strip()) if executable.strip() else None
     )
-
-
-_STYLE = """
-QMainWindow, QDialog {
-    background: #f3f7f8;
-    color: #063853;
-}
-QFrame#header {
-    background: #063853;
-    border-radius: 12px;
-}
-QLabel#appTitle {
-    color: #ffffff;
-    font-size: 28px;
-    font-weight: 700;
-}
-QLabel#appSubtitle, QLabel#muted {
-    color: #78909b;
-}
-QFrame#header QLabel#appSubtitle {
-    color: #b7d9d9;
-}
-QFrame#section, QFrame#reportBar {
-    background: #ffffff;
-    border: 1px solid #d7e3e5;
-    border-radius: 10px;
-}
-QFrame#reportBar {
-    border-left: 5px solid #40B7B5;
-}
-QLabel#count, QLabel#subheading {
-    color: #40B7B5;
-    font-weight: 700;
-}
-QLineEdit, QSpinBox, QDoubleSpinBox, QListWidget, QTableWidget {
-    background: #fbfdfd;
-    border: 1px solid #bfd1d5;
-    border-radius: 6px;
-    padding: 6px;
-    selection-background-color: #40B7B5;
-    selection-color: #063853;
-}
-QWidget#modeSelector {
-    background: #e8f1f2;
-    border: 1px solid #b7cdd0;
-    border-radius: 6px;
-}
-QToolButton#modeOption {
-    background: transparent;
-    border: 0;
-    color: #063853;
-    padding: 7px 10px;
-}
-QToolButton#modeOption:hover {
-    background: #d7ecec;
-}
-QToolButton#modeOption:checked {
-    background: #40B7B5;
-    color: #063853;
-}
-QListWidget, QTableWidget {
-    padding: 2px;
-}
-QPushButton {
-    background: #e8f1f2;
-    border: 1px solid #b7cdd0;
-    border-radius: 6px;
-    color: #063853;
-    padding: 8px 13px;
-    font-weight: 600;
-}
-QPushButton:hover {
-    background: #d7ecec;
-    border-color: #40B7B5;
-}
-QPushButton#primary {
-    background: #E73C40;
-    border-color: #E73C40;
-    color: #ffffff;
-}
-QPushButton#primary:hover {
-    background: #c92f34;
-}
-QHeaderView::section {
-    background: #e8f1f2;
-    border: 0;
-    color: #063853;
-    font-weight: 700;
-    padding: 7px;
-}
-QSplitter::handle {
-    background: #b7d9d9;
-    height: 5px;
-}
-"""
