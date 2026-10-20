@@ -40,9 +40,15 @@ class GuiSettings:
         default_factory=lambda: default_data_directory() / "reports"
     )
     thermo: ThermoToolSettings = field(default_factory=ThermoToolSettings)
+    theme_mode: str = "system"
 
     def __post_init__(self) -> None:
         """Validate persisted values and normalize enum and path fields."""
+        if self.theme_mode not in ("system", "light", "dark"):
+            raise ConfigurationError(
+                f"GUI theme mode {self.theme_mode!r} is invalid; choose 'system', "
+                "'light', or 'dark'."
+            )
         try:
             scope = DiscoveryScope(self.scope)
         except (TypeError, ValueError) as error:
@@ -180,6 +186,7 @@ def _settings_from_mapping(payload: Any) -> GuiSettings:
         report_directory=Path(
             payload.get("report_directory", default_data_directory() / "reports")
         ),
+        theme_mode=payload.get("theme_mode", "system"),
         thermo=ThermoToolSettings(
             executable_path=Path(executable_path) if executable_path else None,
         ),
@@ -203,6 +210,7 @@ def _settings_to_mapping(settings: GuiSettings) -> dict[str, Any]:
             for pattern in settings.patterns
         ],
         "report_directory": str(settings.report_directory),
+        "theme_mode": settings.theme_mode,
         "thermo": {
             "executable_path": (
                 None

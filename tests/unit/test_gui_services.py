@@ -13,7 +13,7 @@ from rawtrace_qc.discovery import DiscoveryCandidate, FileFormat, Vendor
 from rawtrace_qc.errors import ConfigurationError
 from rawtrace_qc.extractors import BrukerExtractor, ThermoExtractor
 from rawtrace_qc.gui.cache import CacheResult, TraceCache
-from rawtrace_qc.gui.config import ThermoToolSettings
+from rawtrace_qc.gui.config import GuiSettings, ThermoToolSettings, load_settings, save_settings
 from rawtrace_qc.gui.reporting import ReportGenerationOptions, ReportStorageMode, generate_report
 from rawtrace_qc.gui.thermo import ThermoToolManager
 from rawtrace_qc.models import ExtractionResult
@@ -23,6 +23,32 @@ from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 
 def _bruker_candidate(path: Path) -> DiscoveryCandidate:
     return DiscoveryCandidate(path, Vendor.BRUKER, FileFormat.D)
+
+
+class TestGuiSettings:
+    def test_theme_mode_defaults_to_system(self) -> None:
+        assert GuiSettings().theme_mode == "system"
+
+    @pytest.mark.parametrize("theme_mode", ("system", "light", "dark"))
+    def test_accepts_supported_theme_modes(self, theme_mode: str) -> None:
+        assert GuiSettings(theme_mode=theme_mode).theme_mode == theme_mode
+
+    def test_rejects_unsupported_theme_mode(self) -> None:
+        with pytest.raises(ConfigurationError, match="GUI theme mode"):
+            GuiSettings(theme_mode="sepia")
+
+    def test_persists_and_loads_theme_mode(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "settings.json"
+
+        save_settings(GuiSettings(theme_mode="dark"), config_path)
+
+        assert load_settings(config_path).theme_mode == "dark"
+
+    def test_uses_system_theme_mode_for_legacy_settings(self, tmp_path: Path) -> None:
+        config_path = tmp_path / "settings.json"
+        config_path.write_text("{}", encoding="utf-8")
+
+        assert load_settings(config_path).theme_mode == "system"
 
 
 class TestTraceCache:

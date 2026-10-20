@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
+from types import SimpleNamespace
 
 import pytest
 from rawtrace_qc.gui.app import _load_qt, create_window
-from rawtrace_qc.gui.theme import DARK_THEME, LIGHT_THEME, Theme, apply_theme, generate_stylesheet
+from rawtrace_qc.gui.config import GuiSettings, save_settings
+from rawtrace_qc.gui.theme import (
+    DARK_THEME,
+    LIGHT_THEME,
+    Theme,
+    apply_theme,
+    generate_stylesheet,
+    resolve_theme,
+)
 
 QtGui = pytest.importorskip("PySide6.QtGui")
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
@@ -20,12 +29,40 @@ def qt_application():
 class TestTheme:
     def test_theme_is_frozen(self) -> None:
         assert isinstance(LIGHT_THEME, Theme)
+        assert LIGHT_THEME.name == "light"
         with pytest.raises(FrozenInstanceError):
             LIGHT_THEME.text_primary = "#000000"
 
     def test_dark_theme_has_dark_scheme(self) -> None:
         assert isinstance(DARK_THEME, Theme)
+        assert DARK_THEME.name == "dark"
         assert DARK_THEME.is_dark
+
+
+class TestResolveTheme:
+    def test_explicit_modes_return_matching_themes(self) -> None:
+        assert resolve_theme("light") is LIGHT_THEME
+        assert resolve_theme("dark") is DARK_THEME
+
+    def test_system_mode_uses_qt_dark_color_scheme(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        dark_scheme = object()
+        application = SimpleNamespace(styleHints=lambda: SimpleNamespace(colorScheme=lambda: dark_scheme))
+        qt_gui = SimpleNamespace(QGuiApplication=SimpleNamespace(instance=lambda: application))
+        monkeypatch.setattr(
+            "rawtrace_qc.gui.theme.import_module",
+            lambda _name: SimpleNamespace(Qt=SimpleNamespace(ColorScheme=SimpleNamespace(Dark=dark_scheme))),
+        )
+
+        assert resolve_theme("system", qt_gui) is DARK_THEME
+
+    def test_system_mode_falls_back_to_light_when_qt_color_scheme_is_unavailable(self) -> None:
+        qt_gui = SimpleNamespace(QGuiApplication=SimpleNamespace(instance=lambda: None))
+
+        assert resolve_theme("system", qt_gui) is LIGHT_THEME
+
+    def test_invalid_mode_raises_value_error(self) -> None:
+        with pytest.raises(ValueError, match="Invalid theme mode"):
+            resolve_theme("sepia")
 
 
 class TestGenerateStylesheet:
@@ -75,5 +112,15 @@ class TestApplyTheme:
 
         window = create_window(qt_core, qt_gui, qt_widgets, tmp_path / "settings.json")
 
-        assert qt_application.styleSheet() == generate_stylesheet(LIGHT_THEME)
+        assert qt_application.styleSheet() == generate_stylesheet(resolve_theme("system", qt_gui))
+        window.close()
+
+    def test_create_window_applies_saved_theme_mode(self, qt_application, tmp_path) -> None:
+        qt_core, qt_gui, qt_widgets = _load_qt()
+        settings_path = tmp_path / "settings.json"
+        save_settings(GuiSettings(theme_mode="dark"), settings_path)
+
+        window = create_window(qt_core, qt_gui, qt_widgets, settings_path)
+
+        assert qt_application.styleSheet() == generate_stylesheet(DARK_THEME)
         window.close()

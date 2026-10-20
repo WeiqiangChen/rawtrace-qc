@@ -12,6 +12,7 @@ from typing import Any
 class Theme:
     """Store semantic colors used to style the desktop interface."""
 
+    name: str = "light"
     is_dark: bool = False
 
     # Window and section surfaces
@@ -70,8 +71,9 @@ class Theme:
     tooltip_text: str = "#ffffff"
 
 
-LIGHT_THEME = Theme()
+LIGHT_THEME = Theme(name="light")
 DARK_THEME = Theme(
+    name="dark",
     window_background="#12161a",
     surface_background="#1c2128",
     section_background="#1c2128",
@@ -117,6 +119,7 @@ __all__ = [
     "apply_theme",
     "generate_stylesheet",
     "get_active_theme",
+    "resolve_theme",
 ]
 
 
@@ -316,6 +319,59 @@ QToolTip {
 _active_theme = LIGHT_THEME
 
 
+def resolve_theme(mode: str, qt_gui: Any | None = None) -> Theme:
+    """Resolve a configured theme mode to its semantic colors.
+
+    Args:
+        mode: Theme selection. Must be `system`, `light`, or `dark`.
+        qt_gui: Optional loaded `PySide6.QtGui` module. If None (default), QtGui
+            is imported when available.
+
+    Returns:
+        The light or dark theme matching the selection. System mode falls back
+        to the light theme when Qt cannot provide a color scheme.
+
+    Raises:
+        ValueError: If `mode` is not a supported theme selection.
+    """
+    if mode not in ["light", "dark", "system"]:
+        raise ValueError(
+            f"Invalid theme mode {mode!r}. Must be one of 'system', 'light', or 'dark'."
+        )
+
+    if mode == "light":
+        return LIGHT_THEME
+    if mode == "dark":
+        return DARK_THEME
+
+    if qt_gui is None:
+        try:
+            qt_gui = import_module("PySide6.QtGui")
+        except ImportError:
+            return LIGHT_THEME
+    application_type = getattr(qt_gui, "QGuiApplication", None)
+    if application_type is None:
+        return LIGHT_THEME
+    try:
+        application = application_type.instance()
+        style_hints = (
+            application.styleHints()
+            if application is not None
+            else application_type.styleHints()
+        )
+        color_scheme = style_hints.colorScheme()
+        qt_core = import_module("PySide6.QtCore")
+        scheme_type = getattr(qt_core.Qt, "ColorScheme", None)
+        dark_scheme = getattr(scheme_type, "Dark", None)
+    except (AttributeError, ImportError, RuntimeError, TypeError):
+        return LIGHT_THEME
+    return (
+        DARK_THEME
+        if dark_scheme is not None and color_scheme == dark_scheme
+        else LIGHT_THEME
+    )
+
+
 def generate_stylesheet(theme: Theme) -> str:
     """Generate a Qt stylesheet from semantic theme colors.
 
@@ -392,23 +448,6 @@ def apply_theme(app_or_window: Any, theme: Theme, qt_gui: Any | None = None) -> 
                     else:
                         palette.setColor(group, role, color_type(color))
         app_or_window.setPalette(palette)
-
-    application_type = getattr(qt_gui, "QGuiApplication", None)
-    if application_type is not None:
-        try:
-            application = application_type.instance()
-            style_hints = application.styleHints() if application is not None else None
-            set_color_scheme = getattr(style_hints, "setColorScheme", None)
-            if not callable(set_color_scheme):
-                set_color_scheme = getattr(application_type, "setColorScheme", None)
-            qt_core = import_module("PySide6.QtCore")
-            scheme_type = getattr(qt_core.Qt, "ColorScheme", None)
-            color_scheme_name = "Dark" if theme.is_dark else "Light"
-            color_scheme = getattr(scheme_type, color_scheme_name, None)
-            if callable(set_color_scheme) and color_scheme is not None:
-                set_color_scheme(color_scheme)
-        except (AttributeError, ImportError, RuntimeError, TypeError):
-            pass
 
 
 def get_active_theme() -> Theme:

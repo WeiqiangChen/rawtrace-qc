@@ -27,10 +27,9 @@ from rawtrace_qc.gui.reporting import (
     generate_report,
 )
 from rawtrace_qc.gui.theme import (
-    LIGHT_THEME,
     apply_theme,
-    generate_stylesheet,
     get_active_theme,
+    resolve_theme,
 )
 from rawtrace_qc.gui.workflow import RawFileSelection
 from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
@@ -39,11 +38,15 @@ from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
 def main() -> int:
     """Create the Qt application, show its main window, and run its event loop."""
     qt_core, qt_gui, qt_widgets = _load_qt()
+    try:
+        settings = load_settings()
+    except ConfigurationError:
+        settings = GuiSettings()
     application = qt_widgets.QApplication.instance()
     if application is None:
         application = qt_widgets.QApplication(sys.argv)
     application.setStyle("Fusion")
-    apply_theme(application, LIGHT_THEME, qt_gui)
+    apply_theme(application, resolve_theme(settings.theme_mode, qt_gui), qt_gui)
     application.setApplicationName("rawtrace-qc")
     application.setOrganizationName("rawtrace-qc")
     window = create_window(qt_core, qt_gui, qt_widgets)
@@ -59,17 +62,15 @@ def create_window(
 ) -> Any:
     """Build and return the main window using already-loaded Qt modules."""
     application = qt_widgets.QApplication.instance()
-    if application is not None and application.styleSheet() != generate_stylesheet(
-        LIGHT_THEME
-    ):
-        apply_theme(application, LIGHT_THEME, qt_gui)
-
     try:
         settings = load_settings(settings_path)
         configuration_message = ""
     except ConfigurationError as error:
         settings = GuiSettings()
         configuration_message = f"Configuration reset to defaults: {error}"
+    theme = resolve_theme(settings.theme_mode, qt_gui)
+    if application is not None:
+        apply_theme(application, theme, qt_gui)
 
     class DropList(qt_widgets.QListWidget):
         """Accept local files and folders dropped from the operating system."""
@@ -250,7 +251,36 @@ def create_window(
             self._rendering_candidates = False
             self._rendering_selected = False
             self._configuration_message = configuration_message
+            self._candidate_list: Any = None
             self._build_ui()
+            self._connect_system_color_scheme_listener()
+
+        def _connect_system_color_scheme_listener(self) -> None:
+            gui_application_type = getattr(qt_gui, "QGuiApplication", None)
+            if gui_application_type is None:
+                return
+            application = gui_application_type.instance()
+            if application is None:
+                return
+            try:
+                style_hints = application.styleHints()
+                signal = getattr(style_hints, "colorSchemeChanged", None)
+                if signal is not None and callable(getattr(signal, "connect", None)):
+                    signal.connect(self._on_system_color_scheme_changed)
+            except (AttributeError, RuntimeError, TypeError):
+                return
+
+        def _apply_current_theme(self) -> None:
+            theme = resolve_theme(self._settings.theme_mode, qt_gui)
+            application = qt_widgets.QApplication.instance()
+            apply_theme(application if application is not None else self, theme, qt_gui)
+            self.selected_list.viewport().update()
+            if self._candidate_list is not None:
+                self._candidate_list.viewport().update()
+
+        def _on_system_color_scheme_changed(self, *_args: Any) -> None:
+            if self._settings.theme_mode == "system":
+                self._apply_current_theme()
 
         def _build_ui(self) -> None:
             central = qt_widgets.QWidget()
@@ -480,6 +510,7 @@ def create_window(
             candidate_list = qt_widgets.QListWidget()
             candidate_list._file_item_delegate = FileItemDelegate(candidate_list)
             candidate_list.setItemDelegate(candidate_list._file_item_delegate)
+            self._candidate_list = candidate_list
             candidate_list.setSelectionMode(
                 qt_widgets.QAbstractItemView.SelectionMode.ExtendedSelection
             )
@@ -687,6 +718,7 @@ def create_window(
             refresh_patterns()
             dialog.finished.connect(lambda _: persist_pattern_definitions())
             dialog.exec()
+            self._candidate_list = None
 
         def _set_candidate_checks(self, active: bool, render: Any) -> None:
             for entry in self._selection.candidates:
@@ -844,6 +876,18 @@ def create_window(
             helper_path = qt_widgets.QLineEdit(
                 str(self._settings.thermo.executable_path or "")
             )
+            theme_combo = qt_widgets.QComboBox()
+            theme_combo.setObjectName("themeMode")
+            theme_modes = (("System", "system"), ("Light", "light"), ("Dark", "dark"))
+            for label, mode in theme_modes:
+                theme_combo.addItem(label, mode)
+            theme_combo.setCurrentIndex(
+                next(
+                    index
+                    for index, (_, mode) in enumerate(theme_modes)
+                    if mode == self._settings.theme_mode
+                )
+            )
             size_edit = qt_widgets.QLineEdit(str(int(self._settings.min_size_mb)))
             size_edit.setValidator(
                 qt_gui.QRegularExpressionValidator(
@@ -861,6 +905,7 @@ def create_window(
 
             form.addRow("Minimum file size (MB)", size_edit)
             form.addRow("Minimum age (minutes)", age_edit)
+            form.addRow("Theme", theme_combo)
             form.addRow("Trace cache", _path_editor(cache_edit, dialog, False))
             form.addRow("Permanent reports", _path_editor(report_edit, dialog, False))
             form.addRow(
@@ -897,6 +942,7 @@ def create_window(
                     helper_path,
                     size_edit,
                     age_edit,
+                    theme_combo,
                     persist=persist,
                 )
 
@@ -907,6 +953,7 @@ def create_window(
                     helper_path,
                     size_edit,
                     age_edit,
+                    theme_combo,
                 )
             )
             apply_button.clicked.connect(lambda: apply_settings(False))
@@ -928,6 +975,7 @@ def create_window(
             helper_path: Any,
             size_edit: Any,
             age_edit: Any,
+            theme_combo: Any,
             persist: bool,
         ) -> None:
             nonlocal cache, current_settings
@@ -951,6 +999,7 @@ def create_window(
                     cache_directory=Path(cache_edit.text()),
                     report_directory=Path(report_edit.text()),
                     thermo=_thermo_settings(helper_path.text()),
+                    theme_mode=str(theme_combo.currentData()),
                 )
                 if persist:
                     save_settings(updated, settings_path)
@@ -963,6 +1012,7 @@ def create_window(
             cache = TraceCache(updated.cache_directory)
             self._cache = cache
             self.report_directory_edit.setText(str(updated.report_directory))
+            self._apply_current_theme()
             dialog.accept()
 
         def _reset_settings_dialog(
@@ -972,6 +1022,7 @@ def create_window(
             helper_path: Any,
             size_edit: Any,
             age_edit: Any,
+            theme_combo: Any,
         ) -> None:
             defaults = GuiSettings()
             cache_edit.setText(str(defaults.cache_directory))
@@ -979,6 +1030,7 @@ def create_window(
             helper_path.clear()
             size_edit.setText(str(defaults.min_size_mb))
             age_edit.setText(str(defaults.min_age_minutes))
+            theme_combo.setCurrentIndex(0)
 
         def closeEvent(self, event: Any) -> None:
             if self._worker is not None:

@@ -10,6 +10,7 @@ from rawtrace_qc.discovery import DiscoveryCandidate, FileFormat, Vendor
 from rawtrace_qc.gui.app import _dialog_start_directory, _load_qt, create_window
 from rawtrace_qc.gui.config import load_settings
 from rawtrace_qc.gui.patterns import FilenamePattern, PatternMode
+from rawtrace_qc.gui.theme import DARK_THEME, get_active_theme
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QtCore = pytest.importorskip("PySide6.QtCore")
@@ -129,6 +130,13 @@ class TestSettingsDialog:
                 )
                 buttons = {button.text(): button for button in dialog.findChildren(qt_widgets.QPushButton)}
                 assert {"Apply", "Apply and save", "Cancel", "Reset defaults"} <= buttons.keys()
+                theme_combo = dialog.findChild(qt_widgets.QComboBox, "themeMode")
+                assert theme_combo is not None
+                assert [theme_combo.itemText(index) for index in range(theme_combo.count())] == [
+                    "System",
+                    "Light",
+                    "Dark",
+                ]
                 cache_edit = next(
                     edit
                     for edit in dialog.findChildren(qt_widgets.QLineEdit)
@@ -137,10 +145,14 @@ class TestSettingsDialog:
                 cache_edit.setText(str(tmp_path / "session-cache"))
                 buttons["Reset defaults"].click()
                 assert cache_edit.text() == str(window._settings.cache_directory)
+                assert theme_combo.currentData() == "system"
                 assert window._settings.cache_directory != tmp_path / "session-cache"
                 cache_edit.setText(str(tmp_path / "session-cache"))
+                theme_combo.setCurrentIndex(2)
                 buttons["Apply"].click()
                 result["applied_path"] = window._settings.cache_directory
+                result["theme_mode"] = window._settings.theme_mode
+                result["active_theme"] = get_active_theme()
                 result["exists_after_apply"] = settings_path.exists()
                 result["dialog_closed"] = not dialog.isVisible()
             except (AssertionError, AttributeError, StopIteration) as error:
@@ -154,6 +166,8 @@ class TestSettingsDialog:
 
         assert "error" not in result
         assert result["applied_path"] == tmp_path / "session-cache"
+        assert result["theme_mode"] == "dark"
+        assert result["active_theme"] is DARK_THEME
         assert result["exists_after_apply"] is False
         assert result["dialog_closed"] is True
         window.close()
@@ -183,9 +197,13 @@ class TestSettingsDialog:
                     for edit in dialog.findChildren(qt_widgets.QLineEdit)
                     if edit.text() == str(window._settings.cache_directory)
                 )
+                theme_combo = dialog.findChild(qt_widgets.QComboBox, "themeMode")
+                assert theme_combo is not None
                 cache_edit.setText(str(tmp_path / "saved-cache"))
+                theme_combo.setCurrentIndex(2)
                 buttons["Apply and save"].click()
                 result["saved_path"] = load_settings(settings_path).cache_directory
+                result["saved_theme_mode"] = load_settings(settings_path).theme_mode
                 result["dialog_closed"] = not dialog.isVisible()
             except (AssertionError, AttributeError, StopIteration) as error:
                 result["error"] = error
@@ -198,5 +216,20 @@ class TestSettingsDialog:
 
         assert "error" not in result
         assert result["saved_path"] == tmp_path / "saved-cache"
+        assert result["saved_theme_mode"] == "dark"
         assert result["dialog_closed"] is True
+        window.close()
+
+
+class TestSystemThemeListener:
+    def test_system_color_scheme_change_applies_resolved_theme(
+        self, tmp_path: Path, qt_application, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        qt_core, qt_gui, qt_widgets = _load_qt()
+        window = create_window(qt_core, qt_gui, qt_widgets, tmp_path / "settings.json")
+        monkeypatch.setattr("rawtrace_qc.gui.app.resolve_theme", lambda _mode, _qt_gui: DARK_THEME)
+
+        window._on_system_color_scheme_changed()
+
+        assert get_active_theme() is DARK_THEME
         window.close()
