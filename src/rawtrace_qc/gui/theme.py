@@ -12,6 +12,8 @@ from typing import Any
 class Theme:
     """Store semantic colors used to style the desktop interface."""
 
+    is_dark: bool = False
+
     # Window and section surfaces
     window_background: str = "#f3f7f8"
     surface_background: str = "#ffffff"
@@ -21,6 +23,7 @@ class Theme:
     input_background: str = "#fbfdfd"
     button_background: str = "#e8f1f2"
     button_hover: str = "#d7ecec"
+    button_disabled: str = "#e8f1f2"
 
     # Text colors
     text_primary: str = "#063853"
@@ -68,6 +71,53 @@ class Theme:
 
 
 LIGHT_THEME = Theme()
+DARK_THEME = Theme(
+    window_background="#12161a",
+    surface_background="#1c2128",
+    section_background="#1c2128",
+    input_background="#171b21",
+    button_background="#262c36",
+    button_hover="#323a46",
+    button_disabled="#1c2128",
+    text_primary="#e6edf3",
+    text_muted="#919ea8",
+    text_disabled="#656f7d",
+    placeholder_text="#76828f",
+    header_background="#0b283b",
+    header_title="#ffffff",
+    header_subtitle="#85c5c3",
+    accent="#40B7B5",
+    accent_hover="#4ed1cf",
+    accent_text="#063853",
+    primary_button="#E73C40",
+    primary_button_hover="#f04d51",
+    primary_button_text="#ffffff",
+    border="#30363d",
+    border_input="#444c56",
+    border_strong="#485260",
+    selection_background="#255d6e",
+    selection_text="#ffffff",
+    checkbox_border="#8b949e",
+    checkbox_background="#171b21",
+    checkbox_check="#40B7B5",
+    scrollbar_background="#12161a",
+    scrollbar_handle="#363d47",
+    splitter_handle="#363d47",
+    header_section_background="#252b34",
+    header_section_text="#e6edf3",
+    tooltip_background="#2d333b",
+    tooltip_text="#e6edf3",
+    is_dark=True,
+)
+
+__all__ = [
+    "DARK_THEME",
+    "LIGHT_THEME",
+    "Theme",
+    "apply_theme",
+    "generate_stylesheet",
+    "get_active_theme",
+]
 
 
 _STYLESHEET = Template(
@@ -176,7 +226,7 @@ QPushButton:hover, QToolButton:hover {
     border-color: $accent;
 }
 QPushButton:disabled, QToolButton:disabled {
-    background: $button_background;
+    background: $button_disabled;
     color: $text_disabled;
     border-color: $border;
 }
@@ -191,7 +241,7 @@ QPushButton#primary:hover {
     border-color: $primary_button_hover;
 }
 QPushButton#primary:disabled {
-    background: $button_background;
+    background: $button_disabled;
     color: $text_disabled;
     border-color: $border;
 }
@@ -353,9 +403,10 @@ def apply_theme(app_or_window: Any, theme: Theme, qt_gui: Any | None = None) -> 
                 set_color_scheme = getattr(application_type, "setColorScheme", None)
             qt_core = import_module("PySide6.QtCore")
             scheme_type = getattr(qt_core.Qt, "ColorScheme", None)
-            light_scheme = getattr(scheme_type, "Light", None)
-            if callable(set_color_scheme) and light_scheme is not None:
-                set_color_scheme(light_scheme)
+            color_scheme_name = "Dark" if theme.is_dark else "Light"
+            color_scheme = getattr(scheme_type, color_scheme_name, None)
+            if callable(set_color_scheme) and color_scheme is not None:
+                set_color_scheme(color_scheme)
         except (AttributeError, ImportError, RuntimeError, TypeError):
             pass
 
