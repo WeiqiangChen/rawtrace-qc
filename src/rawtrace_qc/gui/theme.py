@@ -19,6 +19,12 @@ class Theme:
     window_background: str = "#f3f7f8"
     surface_background: str = "#ffffff"
     section_background: str = "#ffffff"
+    card_background: str = "#ffffff"
+    card_border: str = "#D5E1E6"
+    badge_background: str = "#0F7C7A"
+    badge_text: str = "#ffffff"
+    title_text: str = "#063853"
+    muted_text: str = "#4F6B79"
 
     # Input and standard button surfaces
     input_background: str = "#fbfdfd"
@@ -41,9 +47,11 @@ class Theme:
     accent_text: str = "#063853"
 
     # Primary action button colors
-    primary_button: str = "#E73C40"
-    primary_button_hover: str = "#c92f34"
+    primary_button: str = "#C62B2F"
+    primary_button_hover: str = "#a92427"
     primary_button_text: str = "#ffffff"
+    scan_button_background: str = "#E73C40"
+    scan_button_hover: str = "#c92f34"
 
     # Borders and selection colors
     border: str = "#d7e3e5"
@@ -77,6 +85,12 @@ DARK_THEME = Theme(
     window_background="#12161a",
     surface_background="#1c2128",
     section_background="#1c2128",
+    card_background="#1c2128",
+    card_border="#30363d",
+    badge_background="#0F7C7A",
+    badge_text="#ffffff",
+    title_text="#e6edf3",
+    muted_text="#919ea8",
     input_background="#171b21",
     button_background="#262c36",
     button_hover="#323a46",
@@ -91,9 +105,11 @@ DARK_THEME = Theme(
     accent="#40B7B5",
     accent_hover="#4ed1cf",
     accent_text="#063853",
-    primary_button="#E73C40",
-    primary_button_hover="#f04d51",
+    primary_button="#C62B2F",
+    primary_button_hover="#d83438",
     primary_button_text="#ffffff",
+    scan_button_background="#E73C40",
+    scan_button_hover="#f04d51",
     border="#30363d",
     border_input="#444c56",
     border_strong="#485260",
@@ -132,16 +148,30 @@ QMainWindow, QDialog, QMessageBox {
     background: $window_background;
     color: $text_primary;
 }
-QFrame#section, QFrame#reportBar {
-    background: $section_background;
+QFrame#card, QFrame#section {
+    background: $card_background;
     color: $text_primary;
-    border: 1px solid $border;
-    border-radius: 10px;
+    border: 1px solid $card_border;
+    border-radius: 12px;
 }
-QFrame#reportBar {
-    background: $section_background;
-    color: $text_primary;
-    border-left: 5px solid $accent;
+QLabel#cardBadge {
+    background: $badge_background;
+    color: $badge_text;
+    border-radius: 11px;
+    font-size: 12.5px;
+    font-weight: 700;
+}
+QLabel#cardTitle {
+    background: transparent;
+    color: $title_text;
+    font-size: 15px;
+    font-weight: 600;
+}
+QLabel#statusLabel {
+    background: transparent;
+    color: $muted_text;
+    font-size: 13.5px;
+    border: 0;
 }
 QFrame#header {
     background: $header_background;
@@ -155,7 +185,7 @@ QFrame#header QLabel {
 }
 QLabel#appTitle {
     color: $header_title;
-    font-size: 28px;
+    font-size: 22px;
     font-weight: 700;
 }
 QLabel#appSubtitle, QLabel#muted {
@@ -249,19 +279,38 @@ QPushButton:disabled, QToolButton:disabled {
     border-color: $border;
 }
 QPushButton#primary {
-    background: $primary_button;
+    background: $scan_button_background;
     color: $primary_button_text;
-    border-color: $primary_button;
+    border-color: $scan_button_background;
 }
 QPushButton#primary:hover {
-    background: $primary_button_hover;
+    background: $scan_button_hover;
     color: $primary_button_text;
-    border-color: $primary_button_hover;
+    border-color: $scan_button_hover;
 }
 QPushButton#primary:disabled {
     background: $button_disabled;
     color: $text_disabled;
     border-color: $border;
+}
+QPushButton#primaryButton {
+    background: $primary_button;
+    color: $primary_button_text;
+    border: 0;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 0 26px;
+    min-height: 44px;
+    max-height: 44px;
+}
+QPushButton#primaryButton:hover {
+    background: $primary_button_hover;
+    color: $primary_button_text;
+}
+QPushButton#primaryButton:disabled {
+    background: $button_disabled;
+    color: $text_disabled;
 }
 QCheckBox {
     background: transparent;
