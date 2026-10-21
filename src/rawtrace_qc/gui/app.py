@@ -370,6 +370,52 @@ def create_window(
             else:
                 self.signals.finished.emit(result)
 
+    class ElidedLineEdit(qt_widgets.QLineEdit):
+        """Display long paths with a middle ellipsis when the field is inactive."""
+
+        def paintEvent(self, event: Any) -> None:
+            if self.hasFocus() and not self.isReadOnly():
+                super().paintEvent(event)
+                return
+            if not self.text():
+                super().paintEvent(event)
+                return
+
+            option = qt_widgets.QStyleOptionFrame()
+            self.initStyleOption(option)
+            painter = qt_gui.QPainter(self)
+            self.style().drawPrimitive(
+                qt_widgets.QStyle.PrimitiveElement.PE_PanelLineEdit,
+                option,
+                painter,
+                self,
+            )
+            text_rect = self.style().subElementRect(
+                qt_widgets.QStyle.SubElement.SE_LineEditContents,
+                option,
+                self,
+            )
+            margins = self.textMargins()
+            text_rect.adjust(margins.left(), 0, -margins.right(), 0)
+            text_color = self.palette().color(
+                qt_gui.QPalette.ColorGroup.Active
+                if self.isEnabled()
+                else qt_gui.QPalette.ColorGroup.Disabled,
+                qt_gui.QPalette.ColorRole.Text,
+            )
+            painter.setPen(text_color)
+            metrics = qt_gui.QFontMetrics(self.font())
+            display_text = metrics.elidedText(
+                self.text(),
+                qt_core.Qt.TextElideMode.ElideMiddle,
+                text_rect.width(),
+            )
+            painter.drawText(
+                text_rect,
+                self.alignment() | qt_core.Qt.AlignmentFlag.AlignVCenter,
+                display_text,
+            )
+
     class MainWindow(qt_widgets.QMainWindow):
         """Present discovery, selected inputs, and report controls."""
 
@@ -617,15 +663,27 @@ def create_window(
             self.temporary_storage, self.permanent_storage = storage_buttons
             self.permanent_storage.toggled.connect(self._storage_changed)
             report_content.addWidget(storage_selector)
-            self.report_directory_edit = qt_widgets.QLineEdit(
+            report_content.setSpacing(8)
+            self.report_directory_edit = ElidedLineEdit(
                 str(self._settings.report_directory)
             )
+            self.report_directory_edit.setObjectName("reportDirectoryInput")
+            self.report_directory_edit.setFixedHeight(40)
             self.report_directory_edit.setPlaceholderText("Permanent report directory")
+            self.report_directory_edit.textChanged.connect(
+                self.report_directory_edit.setToolTip
+            )
+            self.report_directory_edit.setToolTip(self.report_directory_edit.text())
             report_content.addWidget(self.report_directory_edit, 1)
-            browse_report = qt_widgets.QPushButton("Browse")
-            browse_report.clicked.connect(self._choose_report_directory)
-            report_content.addWidget(browse_report)
+            self.browse_report_button = qt_widgets.QPushButton("Browse")
+            self.browse_report_button.setObjectName("secondary")
+            self.browse_report_button.setFixedHeight(40)
+            self.browse_report_button.clicked.connect(self._choose_report_directory)
+            report_content.addWidget(self.browse_report_button)
             report_layout.addLayout(report_content)
+            self.report_hint = qt_widgets.QLabel()
+            self.report_hint.setObjectName("reportHint")
+            report_layout.addWidget(self.report_hint)
             self.generate_button = qt_widgets.QPushButton("Generate report")
             self.generate_button.setObjectName("primaryButton")
             self.generate_button.setFixedHeight(44)
@@ -1042,6 +1100,20 @@ def create_window(
         def _storage_changed(self) -> None:
             permanent = self.permanent_storage.isChecked()
             self.report_directory_edit.setEnabled(permanent)
+            self.browse_report_button.setEnabled(permanent)
+            if permanent:
+                self.report_hint.setText(
+                    "Permanent report. Saved to the selected folder with an "
+                    "auto-generated timestamp "
+                    "(rawtrace-qc-YYYYMMDD-HHMMSS.html). The default folder can "
+                    "be changed in Settings."
+                )
+            else:
+                self.report_hint.setText(
+                    "Temporary report. Stored in your system's temp folder, "
+                    "opened in your browser, and deleted when the application "
+                    "closes. Choose Permanent to save it."
+                )
 
         def _choose_report_directory(self) -> None:
             path = qt_widgets.QFileDialog.getExistingDirectory(
@@ -1306,8 +1378,8 @@ def _mode_selector(
     container = qt_widgets.QWidget(parent)
     container.setObjectName("modeSelector")
     layout = qt_widgets.QHBoxLayout(container)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(0)
+    layout.setContentsMargins(3, 3, 3, 3)
+    layout.setSpacing(2)
     group = qt_widgets.QButtonGroup(container)
     group.setExclusive(True)
     first = qt_widgets.QToolButton(container)
@@ -1317,6 +1389,7 @@ def _mode_selector(
     for button in (first, second):
         button.setObjectName("modeOption")
         button.setCheckable(True)
+        button.setFixedHeight(34)
         button.setToolButtonStyle(qt_core.Qt.ToolButtonStyle.ToolButtonTextOnly)
         layout.addWidget(button)
     group.addButton(first, 0)

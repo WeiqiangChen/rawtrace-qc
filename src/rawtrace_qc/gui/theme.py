@@ -25,6 +25,12 @@ class Theme:
     badge_text: str = "#ffffff"
     title_text: str = "#063853"
     muted_text: str = "#4F6B79"
+    mode_selector_background: str = "#E8F1F4"
+    mode_option_inactive_text: str = "#063853"
+    mode_option_hover: str = "#d8e7eb"
+    mode_option_active_background: str = "#0F7C7A"
+    mode_option_active_text: str = "#ffffff"
+    report_hint_text: str = "#4F6B79"
 
     # Input and standard button surfaces
     input_background: str = "#fbfdfd"
@@ -119,6 +125,12 @@ DARK_THEME = Theme(
     badge_text="#ffffff",
     title_text="#e6edf3",
     muted_text="#919ea8",
+    mode_selector_background="#262c36",
+    mode_option_inactive_text="#e6edf3",
+    mode_option_hover="#323a46",
+    mode_option_active_background="#0F7C7A",
+    mode_option_active_text="#ffffff",
+    report_hint_text="#919ea8",
     input_background="#171b21",
     button_background="#262c36",
     button_hover="#323a46",
@@ -290,25 +302,46 @@ QTextEdit:disabled, QComboBox:disabled {
     color: $text_disabled;
     border-color: $border;
 }
-QWidget#modeSelector {
-    background: $button_background;
+QLineEdit#reportDirectoryInput {
+    background: $input_background;
     color: $text_primary;
-    border: 1px solid $border_strong;
-    border-radius: 6px;
+    border: 1px solid $folder_input_border;
+    border-radius: 8px;
+    padding: 0 12px;
+    font-size: 13.5px;
+}
+QLineEdit#reportDirectoryInput:disabled {
+    background: $button_disabled_background;
+    color: $button_disabled_text;
+    border: 1px solid $button_disabled_border;
+}
+QLabel#reportHint {
+    color: $report_hint_text;
+    font-size: 12.5px;
+}
+QWidget#modeSelector {
+    background: $mode_selector_background;
+    border: 0;
+    border-radius: 9px;
 }
 QToolButton#modeOption {
     background: transparent;
-    color: $text_primary;
+    color: $mode_option_inactive_text;
     border: 0;
-    padding: 7px 10px;
+    border-radius: 7px;
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 34px;
+    max-height: 34px;
 }
-QToolButton#modeOption:hover {
-    background: $button_hover;
-    color: $text_primary;
+QToolButton#modeOption:hover:!checked {
+    background: $mode_option_hover;
+    color: $mode_option_inactive_text;
 }
 QToolButton#modeOption:checked {
-    background: $accent;
-    color: $accent_text;
+    background: $mode_option_active_background;
+    color: $mode_option_active_text;
 }
 QToolButton:disabled {
     background: $button_background;
