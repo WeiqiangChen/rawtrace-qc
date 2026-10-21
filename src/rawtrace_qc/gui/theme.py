@@ -228,6 +228,21 @@ QPushButton:hover, QToolButton:hover {
     color: $text_primary;
     border-color: $accent;
 }
+QPushButton#headerSettings {
+    background: transparent;
+    color: $header_title;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 8px;
+    padding: 0;
+}
+QPushButton#headerSettings:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: $header_title;
+}
+QPushButton#headerSettings:pressed {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: $header_title;
+}
 QPushButton:disabled, QToolButton:disabled {
     background: $button_disabled;
     color: $text_disabled;

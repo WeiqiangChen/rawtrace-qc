@@ -255,6 +255,14 @@ def create_window(
             self._build_ui()
             self._connect_system_color_scheme_listener()
 
+        def _settings_icon(self, qt_core: Any, qt_gui: Any) -> Any:
+            """Load the header settings icon with a light stroke."""
+            svg_path = Path(__file__).parent / "resources" / "settings-icon.svg"
+            svg_bytes = svg_path.read_bytes().replace(b"currentColor", b"#ffffff")
+            pixmap = qt_gui.QPixmap()
+            pixmap.loadFromData(qt_core.QByteArray(svg_bytes), "SVG")
+            return qt_gui.QIcon(pixmap)
+
         def _connect_system_color_scheme_listener(self) -> None:
             gui_application_type = getattr(qt_gui, "QGuiApplication", None)
             if gui_application_type is None:
@@ -291,14 +299,29 @@ def create_window(
 
             header = qt_widgets.QFrame()
             header.setObjectName("header")
-            header_layout = qt_widgets.QVBoxLayout(header)
+            header_layout = qt_widgets.QHBoxLayout(header)
             header_layout.setContentsMargins(24, 20, 24, 20)
+            header_text_layout = qt_widgets.QVBoxLayout()
             title = qt_widgets.QLabel("rawtrace-qc")
             title.setObjectName("appTitle")
             subtitle = qt_widgets.QLabel("Raw-file review  /  report desk")
             subtitle.setObjectName("appSubtitle")
-            header_layout.addWidget(title)
-            header_layout.addWidget(subtitle)
+            header_text_layout.addWidget(title)
+            header_text_layout.addWidget(subtitle)
+            header_layout.addLayout(header_text_layout)
+            header_layout.addStretch()
+            self.settings_button = qt_widgets.QPushButton()
+            self.settings_button.setObjectName("headerSettings")
+            self.settings_button.setIcon(self._settings_icon(qt_core, qt_gui))
+            self.settings_button.setIconSize(qt_core.QSize(20, 20))
+            self.settings_button.setFixedSize(36, 36)
+            self.settings_button.setCursor(qt_core.Qt.CursorShape.PointingHandCursor)
+            self.settings_button.setToolTip("Settings (Ctrl+,)")
+            self.settings_button.setShortcut(qt_gui.QKeySequence("Ctrl+,"))
+            self.settings_button.clicked.connect(self._open_settings)
+            header_layout.addWidget(
+                self.settings_button, 0, qt_core.Qt.AlignmentFlag.AlignVCenter
+            )
             root.addWidget(header)
 
             source_frame = qt_widgets.QFrame()
@@ -308,12 +331,6 @@ def create_window(
             source_heading = qt_widgets.QHBoxLayout()
             source_heading.addWidget(qt_widgets.QLabel("Discover raw files"))
             source_heading.addStretch()
-            self.settings_button = qt_widgets.QPushButton("Settings")
-            self.settings_button.setToolTip(
-                "Configure discovery, cache, report, and Thermo helper settings"
-            )
-            self.settings_button.clicked.connect(self._open_settings)
-            source_heading.addWidget(self.settings_button)
             source_layout.addLayout(source_heading)
 
             source_row = qt_widgets.QHBoxLayout()
