@@ -72,6 +72,24 @@ def create_window(
     if application is not None:
         apply_theme(application, theme, qt_gui)
 
+    svg_pixmap_cache: dict[tuple[str, str, int], Any] = {}
+
+    def themed_svg_pixmap(resource_name: str, color: str, size: int) -> Any:
+        """Render a bundled SVG resource in a theme color and requested size."""
+        key = (resource_name, color, size)
+        if key not in svg_pixmap_cache:
+            svg_path = Path(__file__).parent / "resources" / resource_name
+            svg_bytes = svg_path.read_bytes().replace(b"currentColor", color.encode())
+            pixmap = qt_gui.QPixmap()
+            pixmap.loadFromData(qt_core.QByteArray(svg_bytes), "SVG")
+            svg_pixmap_cache[key] = pixmap.scaled(
+                size,
+                size,
+                qt_core.Qt.AspectRatioMode.KeepAspectRatio,
+                qt_core.Qt.TransformationMode.SmoothTransformation,
+            )
+        return svg_pixmap_cache[key]
+
     class DropList(qt_widgets.QListWidget):
         """Accept local files and folders dropped from the operating system."""
 
@@ -106,6 +124,105 @@ def create_window(
                 return
             super().dropEvent(event)
 
+        def paintEvent(self, event: Any) -> None:
+            super().paintEvent(event)
+            theme = get_active_theme()
+            painter = qt_gui.QPainter(self.viewport())
+            painter.save()
+            painter.setRenderHint(qt_gui.QPainter.RenderHint.Antialiasing)
+
+            def draw_panel(rect: Any, *, empty: bool) -> None:
+                pen = qt_gui.QPen(
+                    qt_gui.QColor(theme.drop_hint_border),
+                    1.5,
+                    qt_core.Qt.PenStyle.DashLine,
+                )
+                painter.setPen(pen)
+                painter.setBrush(qt_core.Qt.BrushStyle.NoBrush)
+                painter.drawRoundedRect(rect, 8, 8)
+                center_x = rect.center().x()
+                center_y = rect.center().y()
+                if empty:
+                    icon = themed_svg_pixmap(
+                        "upload-icon.svg",
+                        theme.drop_hint_icon,
+                        36,
+                    )
+                    painter.drawPixmap(
+                        qt_core.QRect(center_x - 18, center_y - 52, 36, 36),
+                        icon,
+                    )
+                    font = painter.font()
+                    font.setPixelSize(16)
+                    font.setWeight(qt_gui.QFont.Weight.DemiBold)
+                    painter.setFont(font)
+                    painter.setPen(qt_gui.QColor(theme.text_primary))
+                    painter.drawText(
+                        qt_core.QRect(
+                            rect.left() + 8, center_y - 12, rect.width() - 16, 22
+                        ),
+                        qt_core.Qt.AlignmentFlag.AlignCenter,
+                        "Drop .raw files or .d folders here",
+                    )
+                    font.setPixelSize(14)
+                    font.setWeight(qt_gui.QFont.Weight.Normal)
+                    painter.setFont(font)
+                    painter.setPen(qt_gui.QColor(theme.drop_hint_text))
+                    painter.drawText(
+                        qt_core.QRect(
+                            rect.left() + 8, center_y + 12, rect.width() - 16, 22
+                        ),
+                        qt_core.Qt.AlignmentFlag.AlignCenter,
+                        "or use Choose folder above to scan a directory",
+                    )
+                    return
+
+                font = painter.font()
+                font.setPixelSize(14)
+                font.setWeight(qt_gui.QFont.Weight.Normal)
+                painter.setFont(font)
+                text = "Drop .raw files or folders here to add more"
+                metrics = qt_gui.QFontMetrics(font)
+                icon_size = 18
+                gap = 8
+                total_width = icon_size + gap + metrics.horizontalAdvance(text)
+                content_left = center_x - total_width // 2
+                icon = themed_svg_pixmap(
+                    "upload-icon.svg", theme.drop_hint_text, icon_size
+                )
+                painter.drawPixmap(
+                    qt_core.QRect(
+                        content_left, center_y - icon_size // 2, icon_size, icon_size
+                    ),
+                    icon,
+                )
+                painter.setPen(qt_gui.QColor(theme.drop_hint_text))
+                painter.drawText(
+                    qt_core.QRect(
+                        content_left + icon_size + gap,
+                        rect.top(),
+                        metrics.horizontalAdvance(text),
+                        rect.height(),
+                    ),
+                    qt_core.Qt.AlignmentFlag.AlignVCenter,
+                    text,
+                )
+
+            if self.count() == 0:
+                draw_panel(
+                    self.viewport().rect().adjusted(12, 12, -12, -12), empty=True
+                )
+            else:
+                last_rect = self.visualItemRect(self.item(self.count() - 1))
+                top = last_rect.bottom() + 12
+                height = self.viewport().height() - top - 12
+                if height >= 48:
+                    draw_panel(
+                        qt_core.QRect(12, top, self.viewport().width() - 24, height),
+                        empty=False,
+                    )
+            painter.restore()
+
     class FileItemDelegate(qt_widgets.QStyledItemDelegate):
         """Paint and toggle explicit checkboxes for file list items."""
 
@@ -129,6 +246,10 @@ def create_window(
                 option.rect.height(),
             )
 
+        def sizeHint(self, option: Any, index: Any) -> Any:
+            hint = super().sizeHint(option, index)
+            return qt_core.QSize(hint.width(), 40)
+
         def initStyleOption(self, option: Any, index: Any) -> None:
             super().initStyleOption(option, index)
             if index.flags() & qt_core.Qt.ItemFlag.ItemIsUserCheckable:
@@ -145,17 +266,27 @@ def create_window(
             if not index.flags() & qt_core.Qt.ItemFlag.ItemIsUserCheckable:
                 super().paint(painter, option, index)
                 return
+            theme = get_active_theme()
+            selected = bool(option.state & qt_widgets.QStyle.StateFlag.State_Selected)
+            if selected:
+                painter.fillRect(
+                    option.rect,
+                    qt_gui.QColor(theme.list_selected_background),
+                )
             display_option = qt_widgets.QStyleOptionViewItem(option)
             display_option.rect.adjust(24, 0, 0, 0)
-            if option.state & qt_widgets.QStyle.StateFlag.State_Selected:
-                painter.fillRect(
-                    self._checkbox_field_rect(option), option.palette.highlight()
-                )
+            display_option.palette.setColor(
+                qt_gui.QPalette.ColorRole.Highlight,
+                qt_gui.QColor(theme.list_selected_background),
+            )
+            display_option.palette.setColor(
+                qt_gui.QPalette.ColorRole.HighlightedText,
+                qt_gui.QColor(theme.list_selected_text),
+            )
             super().paint(painter, display_option, index)
             rect = self._checkbox_rect(option)
             painter.save()
             painter.setRenderHint(qt_gui.QPainter.RenderHint.Antialiasing)
-            theme = get_active_theme()
             painter.setPen(qt_gui.QPen(qt_gui.QColor(theme.checkbox_border), 1.2))
             painter.setBrush(qt_gui.QBrush(qt_gui.QColor(theme.checkbox_background)))
             painter.drawRoundedRect(rect, 3, 3)
@@ -171,6 +302,13 @@ def create_window(
                     qt_core.QPoint(rect.center().x() - 1, rect.bottom() - 4),
                     qt_core.QPoint(rect.right() - 3, rect.top() + 4),
                 )
+            painter.setPen(qt_gui.QPen(qt_gui.QColor(theme.list_divider), 1))
+            painter.drawLine(
+                option.rect.left(),
+                option.rect.bottom(),
+                option.rect.right(),
+                option.rect.bottom(),
+            )
             painter.restore()
 
         def editorEvent(
@@ -263,6 +401,10 @@ def create_window(
             pixmap.loadFromData(qt_core.QByteArray(svg_bytes), "SVG")
             return qt_gui.QIcon(pixmap)
 
+        def _action_icon(self, resource_name: str, color: str, size: int) -> Any:
+            """Return a bundled action icon in the requested theme color."""
+            return qt_gui.QIcon(themed_svg_pixmap(resource_name, color, size))
+
         def _connect_system_color_scheme_listener(self) -> None:
             gui_application_type = getattr(qt_gui, "QGuiApplication", None)
             if gui_application_type is None:
@@ -282,7 +424,15 @@ def create_window(
             theme = resolve_theme(self._settings.theme_mode, qt_gui)
             application = qt_widgets.QApplication.instance()
             apply_theme(application if application is not None else self, theme, qt_gui)
+            self.remove_highlighted_button.setIcon(
+                self._action_icon(
+                    "trash-icon.svg",
+                    theme.destructive_button_text,
+                    14,
+                )
+            )
             self.selected_list.viewport().update()
+            self.selected_list.update()
             if self._candidate_list is not None:
                 self._candidate_list.viewport().update()
 
@@ -387,12 +537,44 @@ def create_window(
             selected_title = qt_widgets.QLabel("Selected files")
             selected_title.setObjectName("cardTitle")
             selected_heading.addWidget(selected_title)
-            self.selected_count = qt_widgets.QLabel("0 files")
-            self.selected_count.setObjectName("count")
+            self.selected_count = qt_widgets.QLabel("0 of 0 checked")
+            self.selected_count.setObjectName("countPill")
             selected_heading.addWidget(self.selected_count)
             selected_heading.addStretch()
+            self.check_all_button = qt_widgets.QPushButton("Check all")
+            self.check_all_button.setObjectName("secondarySmall")
+            self.check_all_button.setFixedHeight(32)
+            self.check_all_button.clicked.connect(lambda: self._set_all_selected(True))
+            selected_heading.addWidget(self.check_all_button)
+            self.uncheck_all_button = qt_widgets.QPushButton("Uncheck all")
+            self.uncheck_all_button.setObjectName("secondarySmall")
+            self.uncheck_all_button.setFixedHeight(32)
+            self.uncheck_all_button.clicked.connect(
+                lambda: self._set_all_selected(False)
+            )
+            selected_heading.addWidget(self.uncheck_all_button)
+            header_divider = qt_widgets.QFrame()
+            header_divider.setObjectName("headerDivider")
+            header_divider.setFixedSize(1, 22)
+            selected_heading.addWidget(header_divider)
+            self.remove_highlighted_button = qt_widgets.QPushButton(
+                "Remove highlighted"
+            )
+            self.remove_highlighted_button.setObjectName("destructiveOutline")
+            self.remove_highlighted_button.setFixedHeight(32)
+            self.remove_highlighted_button.setIcon(
+                self._action_icon(
+                    "trash-icon.svg",
+                    theme.destructive_button_text,
+                    14,
+                )
+            )
+            self.remove_highlighted_button.setIconSize(qt_core.QSize(14, 14))
+            self.remove_highlighted_button.clicked.connect(self._remove_selected)
+            selected_heading.addWidget(self.remove_highlighted_button)
             selected_layout.addLayout(selected_heading)
             self.selected_list = DropList()
+            self.selected_list.setObjectName("selectedList")
             self.selected_list._file_item_delegate = FileItemDelegate(
                 self.selected_list
             )
@@ -400,21 +582,12 @@ def create_window(
             self.selected_list.setSelectionMode(
                 qt_widgets.QAbstractItemView.SelectionMode.ExtendedSelection
             )
+            self.selected_list.setTextElideMode(qt_core.Qt.TextElideMode.ElideMiddle)
             self.selected_list.setToolTip("Drop valid .raw files or .d folders here")
             self.selected_list.paths_dropped.connect(self._add_paths)
             self.selected_list.itemChanged.connect(self._selected_item_changed)
             selected_layout.addWidget(self.selected_list, 1)
-            selected_buttons = qt_widgets.QHBoxLayout()
-            remove = qt_widgets.QPushButton("Remove selected")
-            remove.clicked.connect(self._remove_selected)
-            select_all = qt_widgets.QPushButton("Select all")
-            select_all.clicked.connect(lambda: self._set_all_selected(True))
-            select_none = qt_widgets.QPushButton("Select none")
-            select_none.clicked.connect(lambda: self._set_all_selected(False))
-            for button in (remove, select_all, select_none):
-                selected_buttons.addWidget(button)
-            selected_buttons.addStretch()
-            selected_layout.addLayout(selected_buttons)
+            self._update_selected_count()
             root.addWidget(selected_frame, 1)
 
             report_frame = qt_widgets.QFrame()
@@ -639,6 +812,7 @@ def create_window(
                     item = qt_widgets.QListWidgetItem(entry.candidate.path.name)
                     path_text = str(entry.candidate.path)
                     item.setToolTip(str(entry.candidate.path))
+                    item.setSizeHint(qt_core.QSize(0, 40))
                     item.setData(
                         qt_core.Qt.ItemDataRole.UserRole,
                         path_text,
@@ -834,11 +1008,14 @@ def create_window(
             self._update_selected_count()
 
         def _update_selected_count(self) -> None:
-            """Refresh the active and total counts beside the selected-file list."""
+            """Refresh the checked count and action-button states."""
             active_count = len(self._selection.active_selected())
-            self.selected_count.setText(
-                f"{active_count} active / {len(self._selection.selected)} files"
-            )
+            total_count = len(self._selection.selected)
+            self.selected_count.setText(f"{active_count} of {total_count} checked")
+            has_items = total_count > 0
+            self.check_all_button.setEnabled(has_items)
+            self.uncheck_all_button.setEnabled(has_items)
+            self.remove_highlighted_button.setEnabled(has_items)
 
         def _add_paths(self, paths: tuple[Path, ...]) -> None:
             result = self._selection.add_paths(paths)

@@ -45,6 +45,15 @@ class Theme:
     secondary_button_border: str = "#AFC3CC"
     secondary_button_text: str = "#063853"
     secondary_button_hover: str = "#d8e7eb"
+    count_pill_background: str = "#E3F4F3"
+    count_pill_text: str = "#0B6563"
+    destructive_button_background: str = "#ffffff"
+    destructive_button_border: str = "#E3B3B0"
+    destructive_button_text: str = "#B3261E"
+    destructive_button_hover: str = "#FDF2F2"
+    button_disabled_background: str = "#F3F8FA"
+    button_disabled_border: str = "#D5E1E6"
+    button_disabled_text: str = "#5A7483"
     outline_teal_button_background: str = "#ffffff"
     outline_teal_button_border: str = "#0F7C7A"
     outline_teal_button_text: str = "#0B6563"
@@ -71,6 +80,12 @@ class Theme:
     border_strong: str = "#b7cdd0"
     selection_background: str = "#40B7B5"
     selection_text: str = "#063853"
+    list_divider: str = "#E3ECF0"
+    list_selected_background: str = "#E6F1F6"
+    list_selected_text: str = "#063853"
+    drop_hint_border: str = "#AFC3CC"
+    drop_hint_text: str = "#4F6B79"
+    drop_hint_icon: str = "#0F7C7A"
 
     # Checkbox colors
     checkbox_border: str = "#063853"
@@ -118,6 +133,15 @@ DARK_THEME = Theme(
     secondary_button_border="#444c56",
     secondary_button_text="#e6edf3",
     secondary_button_hover="#323a46",
+    count_pill_background="#1a3438",
+    count_pill_text="#40B7B5",
+    destructive_button_background="#1c2128",
+    destructive_button_border="#7d3532",
+    destructive_button_text="#f87171",
+    destructive_button_hover="#3b1d1d",
+    button_disabled_background="#1e242c",
+    button_disabled_border="#30363d",
+    button_disabled_text="#656f7d",
     outline_teal_button_background="#1c2128",
     outline_teal_button_border="#0F7C7A",
     outline_teal_button_text="#40B7B5",
@@ -138,6 +162,12 @@ DARK_THEME = Theme(
     border_strong="#485260",
     selection_background="#255d6e",
     selection_text="#ffffff",
+    list_divider="#262c36",
+    list_selected_background="#243542",
+    list_selected_text="#e6edf3",
+    drop_hint_border="#444c56",
+    drop_hint_text="#919ea8",
+    drop_hint_icon="#40B7B5",
     checkbox_border="#8b949e",
     checkbox_background="#171b21",
     checkbox_check="#0F7C7A",
@@ -222,6 +252,15 @@ QLabel#count, QLabel#subheading {
     color: $accent;
     font-weight: 700;
 }
+QLabel#countPill {
+    background: $count_pill_background;
+    color: $count_pill_text;
+    border: 0;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12.5px;
+    font-weight: 600;
+}
 QLineEdit, QSpinBox, QDoubleSpinBox, QListWidget, QTableWidget,
 QPlainTextEdit, QTextEdit, QComboBox {
     background: $input_background;
@@ -278,6 +317,16 @@ QToolButton:disabled {
 QListWidget, QTableWidget {
     padding: 2px;
 }
+QListWidget#selectedList {
+    background: $input_background;
+    color: $text_primary;
+    border: 1px solid $card_border;
+    border-radius: 8px;
+    padding: 0;
+    font-size: 13.5px;
+    selection-background-color: $list_selected_background;
+    selection-color: $list_selected_text;
+}
 QPushButton, QToolButton {
     background: $button_background;
     color: $text_primary;
@@ -306,6 +355,53 @@ QPushButton#secondary:hover {
     background: $secondary_button_hover;
     color: $secondary_button_text;
     border-color: $secondary_button_border;
+}
+QPushButton#secondarySmall {
+    background: $secondary_button_background;
+    color: $secondary_button_text;
+    border: 1px solid $secondary_button_border;
+    border-radius: 8px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 32px;
+    max-height: 32px;
+}
+QPushButton#secondarySmall:hover {
+    background: $secondary_button_hover;
+    color: $secondary_button_text;
+    border-color: $secondary_button_border;
+}
+QPushButton#secondarySmall:disabled {
+    background: $button_disabled_background;
+    color: $button_disabled_text;
+    border-color: $button_disabled_border;
+}
+QPushButton#destructiveOutline {
+    background: $destructive_button_background;
+    color: $destructive_button_text;
+    border: 1px solid $destructive_button_border;
+    border-radius: 8px;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    min-height: 32px;
+    max-height: 32px;
+}
+QPushButton#destructiveOutline:hover {
+    background: $destructive_button_hover;
+    color: $destructive_button_text;
+    border-color: $destructive_button_border;
+}
+QPushButton#destructiveOutline:disabled {
+    background: $button_disabled_background;
+    color: $button_disabled_text;
+    border-color: $button_disabled_border;
+}
+QFrame#headerDivider {
+    background: $card_border;
+    border: 0;
+    margin: 0 6px;
 }
 QPushButton#outlineTeal {
     background: $outline_teal_button_background;
