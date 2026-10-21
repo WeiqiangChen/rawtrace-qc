@@ -37,6 +37,18 @@ class Theme:
     text_muted: str = "#78909b"
     text_disabled: str = "#9eb1bb"
     placeholder_text: str = "#78909b"
+    folder_input_border: str = "#AFC3CC"
+    folder_input_placeholder: str = "#5E7886"
+
+    # Secondary and outlined action button colors
+    secondary_button_background: str = "#E8F1F4"
+    secondary_button_border: str = "#AFC3CC"
+    secondary_button_text: str = "#063853"
+    secondary_button_hover: str = "#d8e7eb"
+    outline_teal_button_background: str = "#ffffff"
+    outline_teal_button_border: str = "#0F7C7A"
+    outline_teal_button_text: str = "#0B6563"
+    outline_teal_button_hover: str = "#E3F4F3"
 
     # Header and brand colors
     header_background: str = "#063853"
@@ -63,7 +75,8 @@ class Theme:
     # Checkbox colors
     checkbox_border: str = "#063853"
     checkbox_background: str = "#ffffff"
-    checkbox_check: str = "#40B7B5"
+    checkbox_check: str = "#0F7C7A"
+    checkbox_mark: str = "#ffffff"
 
     # Scrollbar and splitter colors
     scrollbar_background: str = "#f3f7f8"
@@ -99,6 +112,16 @@ DARK_THEME = Theme(
     text_muted="#919ea8",
     text_disabled="#656f7d",
     placeholder_text="#76828f",
+    folder_input_border="#444c56",
+    folder_input_placeholder="#76828f",
+    secondary_button_background="#262c36",
+    secondary_button_border="#444c56",
+    secondary_button_text="#e6edf3",
+    secondary_button_hover="#323a46",
+    outline_teal_button_background="#1c2128",
+    outline_teal_button_border="#0F7C7A",
+    outline_teal_button_text="#40B7B5",
+    outline_teal_button_hover="#1b3a3c",
     header_background="#0b283b",
     header_title="#ffffff",
     header_subtitle="#85c5c3",
@@ -117,7 +140,8 @@ DARK_THEME = Theme(
     selection_text="#ffffff",
     checkbox_border="#8b949e",
     checkbox_background="#171b21",
-    checkbox_check="#40B7B5",
+    checkbox_check="#0F7C7A",
+    checkbox_mark="#ffffff",
     scrollbar_background="#12161a",
     scrollbar_handle="#363d47",
     splitter_handle="#363d47",
@@ -211,6 +235,15 @@ QPlainTextEdit, QTextEdit, QComboBox {
 QLineEdit {
     placeholder-text-color: $placeholder_text;
 }
+QLineEdit#folderInput {
+    background: $input_background;
+    color: $text_primary;
+    border: 1px solid $folder_input_border;
+    border-radius: 8px;
+    padding: 0 12px;
+    font-size: 14px;
+    placeholder-text-color: $folder_input_placeholder;
+}
 QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled,
 QListWidget:disabled, QTableWidget:disabled, QPlainTextEdit:disabled,
 QTextEdit:disabled, QComboBox:disabled {
@@ -257,6 +290,43 @@ QPushButton:hover, QToolButton:hover {
     background: $button_hover;
     color: $text_primary;
     border-color: $accent;
+}
+QPushButton#secondary {
+    background: $secondary_button_background;
+    color: $secondary_button_text;
+    border: 1px solid $secondary_button_border;
+    border-radius: 8px;
+    padding: 0 16px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 40px;
+    max-height: 40px;
+}
+QPushButton#secondary:hover {
+    background: $secondary_button_hover;
+    color: $secondary_button_text;
+    border-color: $secondary_button_border;
+}
+QPushButton#outlineTeal {
+    background: $outline_teal_button_background;
+    color: $outline_teal_button_text;
+    border: 1.5px solid $outline_teal_button_border;
+    border-radius: 8px;
+    padding: 0 18px;
+    font-size: 14px;
+    font-weight: 600;
+    min-height: 40px;
+    max-height: 40px;
+}
+QPushButton#outlineTeal:hover {
+    background: $outline_teal_button_hover;
+    color: $outline_teal_button_text;
+    border-color: $outline_teal_button_border;
+}
+QPushButton#secondary:disabled, QPushButton#outlineTeal:disabled {
+    background: $button_disabled;
+    color: $text_disabled;
+    border-color: $border;
 }
 QPushButton#headerSettings {
     background: transparent;
@@ -316,6 +386,7 @@ QCheckBox {
     background: transparent;
     color: $text_primary;
     spacing: 7px;
+    font-size: 13.5px;
 }
 QCheckBox:disabled {
     background: transparent;
@@ -326,13 +397,13 @@ QCheckBox::indicator {
     color: $checkbox_check;
     border: 1px solid $checkbox_border;
     border-radius: 3px;
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
 }
 QCheckBox::indicator:checked {
     background: $checkbox_check;
-    color: $checkbox_border;
-    border-color: $checkbox_border;
+    color: $checkbox_mark;
+    border-color: $checkbox_check;
 }
 QCheckBox::indicator:disabled {
     background: $window_background;
