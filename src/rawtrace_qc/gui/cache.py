@@ -13,6 +13,8 @@ from rawtrace_qc.extractors.protocol import PrecisionMode
 from rawtrace_qc.models import ExtractionResult
 from rawtrace_qc.traces import load_trace
 
+_CACHE_OUTPUT_NAME = "trace"
+
 
 class CacheExtractor(Protocol):
     """Define the extractor operation required by `TraceCache`."""
@@ -97,7 +99,7 @@ class TraceCache:
         result = extractor.extract(
             source,
             output_directory=cache_directory,
-            output_name=source.name,
+            output_name=_CACHE_OUTPUT_NAME,
             precision_mode=precision_mode,
             select_ms1=select_ms1,
             select_msn=select_msn,
@@ -144,7 +146,7 @@ def _cache_key(
         raise ConfigurationError(
             f"Could not read source metadata for cache key {source}: {error}."
         ) from error
-    return digest.hexdigest()
+    return digest.hexdigest()[:16]
 
 
 def _read_cached_result(
@@ -155,8 +157,8 @@ def _read_cached_result(
     select_msn: bool,
 ) -> ExtractionResult | None:
     expected = {
-        "ms1": cache_directory / f"{source.name}.ms1-trace.parquet",
-        "msn": cache_directory / f"{source.name}.msn-trace.parquet",
+        "ms1": cache_directory / f"{_CACHE_OUTPUT_NAME}.ms1-trace.parquet",
+        "msn": cache_directory / f"{_CACHE_OUTPUT_NAME}.msn-trace.parquet",
     }
     requested = {
         level: path

@@ -19,6 +19,7 @@ from rawtrace_qc.gui.thermo import ThermoToolManager
 from rawtrace_qc.models import ExtractionResult
 from rawtrace_qc.report import ReportAssetMode, ReportOptions
 from rawtrace_qc.thermo import THERMO_HELPER_SPECIFICATION
+from rawtrace_qc.traces import load_trace
 
 
 def _bruker_candidate(path: Path) -> DiscoveryCandidate:
@@ -64,6 +65,9 @@ class TestTraceCache:
         assert second.extraction == first.extraction
         assert second.extraction.ms1_path is not None
         assert second.extraction.ms1_path.is_file()
+        assert len(second.extraction.ms1_path.parent.name) == 16
+        assert second.extraction.ms1_path.name == "trace.ms1-trace.parquet"
+        assert load_trace(second.extraction.ms1_path).metadata["source_filename"] == bruker_fixture.name
 
     def test_partial_cache_is_rebuilt_when_both_levels_are_requested(
         self, bruker_fixture: Path, tmp_path: Path
